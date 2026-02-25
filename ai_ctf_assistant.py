@@ -1,120 +1,135 @@
 import google.generativeai as genai
 import os
-import datetime
 import sys
 import time
+import datetime
 
-# --- الإعدادات المتقدمة للمحرك الذكي ---
-API_KEY = "ضـع_مفـتاحك_هنـا"
+# ==========================================
+# --- إعدادات المحرك (Configuration) ---
+# ==========================================
+API_KEY = "ضـع_مفـتاحك_هنـا"  # استبدله بمفتاح API الخاص بك
 
-# إعدادات لضمان أعلى مستويات الدقة التقنية
-generation_config = {
-    "temperature": 0.1,  # تركيز عالٍ جداً على الدقة التقنية
-    "top_p": 0.9,
-    "top_k": 40,
-    "max_output_tokens": 8192,
-}
-
-# تعطيل الفلاتر للسماح بتحليل الثغرات الأمنية (لأغراض تعليمية وقانونية فقط)
-safety_settings = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-]
+# شعار GHENA المخصص (ASCII ART)
+BANNER = r"""
+  ________  ___  ___  _______   ________   ________     
+ |\   ____\|\  \|\  \|\  ___ \ |\   ___  \|\   __  \    
+ \ \  \___|\ \  \\\  \ \   __/|\ \  \\ \  \ \  \|\  \   
+  \ \  \  __\ \   __  \ \  \_|/_\ \  \\ \  \ \   __  \  
+   \ \  \|\  \ \  \ \  \ \  \_|\ \ \  \\ \  \ \  \ \  \ 
+    \ \_______\ \__\ \__\ \_______\ \__\\ \__\ \__\ \__\
+     \|_______|\|__|\|__|\|_______|\|__| \|__|\|__|\|__|
+            GHENA AI - NEURAL STRATEGIC ENGINE
+"""
 
 class Colors:
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
     CYAN = '\033[96m'
     GREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
+    YELLOW = '\033[93m'
+    MAGENTA = '\033[95m'
+    RED = '\033[91m'
     BOLD = '\033[1m'
     ENDC = '\033[0m'
 
-try:
-    genai.configure(api_key=API_KEY)
-    # استخدام Gemini 1.5 Pro للتحليل العميق وربط المعلومات المعقدة
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-pro",
-        generation_config=generation_config,
-        safety_settings=safety_settings
-    )
-    chat = model.start_chat(history=[])
-except Exception as e:
-    print(f"{Colors.FAIL}[!] فشل في تشغيل المحرك العصبي: {e}{Colors.ENDC}")
-    sys.exit()
+# ==========================================
+# --- الوظائف الحركية والبصرية ---
+# ==========================================
 
-def get_strategic_advice(user_data, target_info):
-    # نظام التعليمات للذكاء الاصطناعي (System Prompt)
+def loading_animation():
+    """تأثير بصري لبدء تشغيل النظام"""
+    os.system('clear' if os.name == 'posix' else 'cls')
+    print(f"{Colors.MAGENTA}{Colors.BOLD}Initializing GHENA AI Strategic Modules...{Colors.ENDC}")
+    animation = ["□□□□□", "■□□□□", "■■□□□", "■■■□□", "■■■■□", "■■■■■"]
+    for i in range(len(animation)):
+        time.sleep(0.3)
+        sys.stdout.write(f"\r{Colors.CYAN}[{animation[i]}] Booting Neural Pathways...{Colors.ENDC}")
+        sys.stdout.flush()
+    print("\n")
+
+def get_strategy(chat_session, output, target_info):
+    """إرسال البيانات للمحرك العصبي وتحليلها"""
     system_instruction = f"""
-    [ROLE: Senior Red Team Lead & Exploit Developer]
-    [TARGET: {target_info}]
+    أنت الآن 'GHENA AI' مساعد خبير في الأمن السيبراني وتحديات CTF.
+    الهدف الحالي: {target_info}
     
-    أنت لست مجرد مساعد، أنت المحلل الاستراتيجي للعملية.
     مهمتك:
-    1. ربط المخرجات ببعضها (Correlation). إذا وجدنا مستخدماً في FTP، جربه في SSH.
-    2. البحث عن CVEs المرتبطة بالإصدارات المكتشفة.
-    3. تقديم "خطة اختراق" (Exploitation Path) واضحة.
-    
-    نموذج الرد:
-    ---
-    🎯 التحليل الاستراتيجي: (اشرح ماذا وجدت وماذا يعني تقنياً)
-    🛡️ نقاط الضعف المكتشفة: (قائمة بالثغرات المحتملة)
-    🚀 الأوامر المقترحة:
-       👉 [الأمر الأول] # الهدف من الأمر
-       👉 [الأمر الثاني] # الهدف من الأمر
-    ⚠️ تنبيه أمني: (تحذير من حظر أو تعليق خدمة)
-    ---
+    1. تحليل المخرجات تقنياً واستخراج الثغرات (CVEs).
+    2. ربط المعلومات ببعضها (Correlation).
+    3. اقتراح الخطوات القادمة بأوامر جاهزة تبدأ بـ 👉.
+    4. شرح مبسط باللغة العربية بجانب كل أمر تقني.
     """
-    
     try:
-        response = chat.send_message(f"{system_instruction}\n\nالمخرجات الجديدة من المختبر:\n{user_data}")
+        response = chat_session.send_message(f"{system_instruction}\n\nالمخرجات الجديدة:\n{output}")
         return response.text
     except Exception as e:
-        return f"حدث خطأ في معالجة البيانات: {e}"
+        return f"{Colors.RED}Error in Neural Engine: {e}{Colors.ENDC}"
+
+# ==========================================
+# --- الدورة الأساسية للبرنامج ---
+# ==========================================
 
 def main():
-    os.system('clear' if os.name == 'posix' else 'cls')
-    print(f"{Colors.HEADER}{Colors.BOLD}╔════════════════════════════════════════════════════════════╗")
-    print(f"║       🧠 AI NEURAL PENTESTER - STRATEGIC ENGINE v5.0       ║")
-    print(f"╚════════════════════════════════════════════════════════════╝{Colors.ENDC}")
+    # 1. تشغيل المؤثرات البصرية
+    loading_animation()
+    print(f"{Colors.CYAN}{Colors.BOLD}{BANNER}{Colors.ENDC}")
+    print(f"{Colors.MAGENTA}{'='*65}{Colors.ENDC}")
 
-    ip = input(f"{Colors.CYAN}[?] IP الهدف: {Colors.ENDC}")
-    platform = input(f"{Colors.CYAN}[?] المنصة (HTB/THM): {Colors.ENDC}")
-    target_info = f"IP: {ip}, Platform: {platform}"
+    # 2. تهيئة الاتصال بـ Gemini
+    try:
+        if API_KEY == "ضـع_مفـتاحك_هنـا":
+            print(f"{Colors.RED}[!] Error: Please set your API_KEY in the script!{Colors.ENDC}")
+            return
+        
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-pro",
+            generation_config={"temperature": 0.2, "max_output_tokens": 4096}
+        )
+        chat = model.start_chat(history=[])
+    except Exception as e:
+        print(f"{Colors.RED}[!] Connection Failed: {e}{Colors.ENDC}")
+        return
 
-    print(f"\n{Colors.GREEN}[+] تم تفعيل المحرك الاستنتاجي لـ {ip}. بانتظار البيانات...{Colors.ENDC}")
+    # 3. إدخال بيانات الهدف
+    target_ip = input(f"{Colors.YELLOW}{Colors.BOLD}[?] Target IP/Domain: {Colors.ENDC}")
+    platform = input(f"{Colors.YELLOW}{Colors.BOLD}[?] Platform (HTB/THM): {Colors.ENDC}")
+    target_info = f"IP: {target_ip}, Platform: {platform}"
+
+    print(f"\n{Colors.GREEN}[+] GHENA Engine is LIVE. Send your tool outputs.{Colors.ENDC}")
 
     while True:
-        print(f"\n{Colors.BLUE}📋 الصق مخرجات الأداة (أو اكتب 'exit' للخروج):{Colors.ENDC}")
+        print(f"\n{Colors.CYAN}📥 Paste tool output below (Press Enter twice to analyze):{Colors.ENDC}")
         
-        user_lines = []
+        user_input = []
         while True:
             line = sys.stdin.readline().rstrip()
             if line == '': break
-            user_lines.append(line)
+            user_input.append(line)
         
-        full_output = "\n".join(user_lines)
-        if full_output.lower() == 'exit': break
+        full_output = "\n".join(user_input)
+        
+        if full_output.lower() == 'exit': 
+            print(f"{Colors.MAGENTA}Shutting down GHENA AI... Goodbye!{Colors.ENDC}")
+            break
+            
         if not full_output.strip(): continue
 
-        print(f"\n{Colors.WARNING}[⚡] جاري تحليل البيانات وبحث الثغرات...{Colors.ENDC}")
+        print(f"\n{Colors.MAGENTA}[⚡] GHENA is calculating attack vectors...{Colors.ENDC}")
         
+        # 4. الحصول على التحليل
         start_time = time.time()
-        advice = get_strategic_advice(full_output, target_info)
+        analysis = get_strategy(chat, full_output, target_info)
         end_time = time.time()
 
-        # عرض النتائج بتنسيق احترافي
-        print(f"\n{Colors.BOLD}{'='*60}{Colors.ENDC}")
-        formatted_advice = advice.replace("👉", f"{Colors.GREEN}{Colors.BOLD}👉{Colors.ENDC}{Colors.BOLD}")
-        print(formatted_advice)
-        print(f"{Colors.BOLD}{'='*60}{Colors.ENDC}")
-        print(f"{Colors.CYAN}⏱️ وقت التحليل: {round(end_time - start_time, 2)} ثانية{Colors.ENDC}")
-
-        # حفظ الجلسة للرجوع إليها لاحقاً
-        with open(f"session_log_{ip.replace('.', '_')}.md", "a", encoding="utf-8") as f:
-            f.write(f"\n### تحليل بتاريخ {datetime.datetime.now()}\n{advice}\n")
+        # 5. عرض النتائج بتنسيق احترافي
+        print(f"\n{Colors.BOLD}{'—'*65}{Colors.ENDC}")
+        # تلوين الأوامر المقترحة لجعلها بارزة
+        formatted_analysis = analysis.replace("👉", f"{Colors.GREEN}{Colors.BOLD}👉{Colors.ENDC}{Colors.BOLD}")
+        print(formatted_analysis)
+        print(f"\n{Colors.BOLD}{'—'*65}{Colors.ENDC}")
+        print(f"{Colors.CYAN}Processing Time: {round(end_time - start_time, 2)}s | Model: Gemini 1.5 Pro{Colors.ENDC}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{Colors.RED}[!] Session Terminated.{Colors.ENDC}")
