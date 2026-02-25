@@ -7,11 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 
 # --- [ إعدادات المحرك العصبي ] ---
-API_KEY = "ضـع_مفـتاحك_هنـا"
-# الكوكيز الخاصة بمتصفحك (اختياري لقراءة الغرف الخاصة)
-SESSION_COOKIES = {
-    "connect.sid": "ضـع_الـكوكـي_هنـا_إذا_لزم_الأمـر" 
-}
+API_KEY = "ضـع_مفـتاحك_هنـا" # تأكد من وضع المفتاح الصحيح هنا
 
 BANNER = r"""
   ________  ___  ___  _______   ________   ________     
@@ -21,7 +17,7 @@ BANNER = r"""
    \ \  \|\  \ \  \ \  \ \  \_|\ \ \  \\ \  \ \  \ \  \ 
     \ \_______\ \__\ \__\ \_______\ \__\\ \__\ \__\ \__\
      \|_______|\|__|\|__|\|_______|\|__| \|__|\|__|\|__|
-           GHENA AI | FULL AUTONOMOUS SOLUTION
+           GHENA AI | REPAIRED & STABLE EDITION
 """
 
 class Colors:
@@ -35,38 +31,35 @@ class Colors:
 # --- [ وظائف جلب البيانات والتحليل ] ---
 
 def scrape_lab_goals(url):
-    """سحب الأسئلة والمهام من رابط المختبر"""
     print(f"{Colors.YELLOW}[*] GHENA is accessing Lab Intelligence...{Colors.ENDC}")
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        # محاولة الدخول بالكوكيز إذا كانت متوفرة
-        res = requests.get(url, headers=headers, cookies=SESSION_COOKIES, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0'}
+        res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.content, 'html.parser')
-        
-        # استخراج العناوين والأسئلة (تخصيص لمنصات الـ CTF)
         tasks = [t.get_text() for t in soup.find_all(['h3', 'h4', 'p'])]
-        return "\n".join(tasks[:20]) # نكتفي بأهم الأجزاء لفهم الأهداف
+        return "\n".join(tasks[:20])
     except Exception as e:
         return f"Scraping Error: {e}"
 
 def execute_smart_tools(target_ip):
-    """تشغيل الأدوات بشكل تسلسلي ذكي"""
     logs = ""
-    
-    # 1. Nmap (أساسي دائماً)
+    # 1. Nmap
     print(f"{Colors.CYAN}[*] Step 1: Broad Reconnaissance (Nmap)...{Colors.ENDC}")
-    nmap_cmd = f"nmap -sV --top-ports 1000 {target_ip}"
-    nmap_out = subprocess.check_output(nmap_cmd, shell=True, text=True)
-    logs += f"\n--- NMAP ---\n{nmap_out}"
+    try:
+        nmap_cmd = f"nmap -sV --top-ports 1000 {target_ip}"
+        nmap_out = subprocess.check_output(nmap_cmd, shell=True, text=True)
+        logs += f"\n--- NMAP ---\n{nmap_out}"
+    except: logs += "\n--- NMAP: Failed ---"
 
-    # 2. اتخاذ قرار ذكي بناءً على المنافذ
-    if "80" in nmap_out or "443" in nmap_out:
+    # 2. Gobuster (تم إصلاح الفلاج -z ليتناسب مع نسختك)
+    if "80" in logs or "443" in logs:
         print(f"{Colors.CYAN}[*] Step 2: Web Path Discovery (Gobuster)...{Colors.ENDC}")
-        gobuster_cmd = f"gobuster dir -u http://{target_ip} -w /usr/share/wordlists/dirb/common.txt -z -q"
+        # أزلنا فلاج -z الذي سبب لك الخطأ في الصورة
+        gobuster_cmd = f"gobuster dir -u http://{target_ip} -w /usr/share/wordlists/dirb/common.txt -q"
         try:
             gobuster_out = subprocess.check_output(gobuster_cmd, shell=True, text=True)
             logs += f"\n--- GOBUSTER ---\n{gobuster_out}"
-        except: logs += "\n--- GOBUSTER: No directories found ---"
+        except: logs += "\n--- GOBUSTER: No directories found or failed ---"
 
     return logs
 
@@ -74,48 +67,37 @@ def main():
     os.system('clear' if os.name == 'posix' else 'cls')
     print(f"{Colors.CYAN}{BANNER}{Colors.ENDC}")
 
-    # تهيئة Gemini 1.5 Pro
-    genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-pro')
-    chat = model.start_chat(history=[])
+    # تهيئة Gemini مع معالجة أخطاء الاتصال
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-pro')
+        chat = model.start_chat(history=[])
+    except Exception as e:
+        print(f"{Colors.RED}[!] Initialization Error: {e}{Colors.ENDC}")
+        return
 
-    # مدخلات المستخدم
     lab_url = input(f"{Colors.BOLD}[?] Lab URL: {Colors.ENDC}")
     target_ip = input(f"{Colors.BOLD}[?] Target IP: {Colors.ENDC}")
 
-    # التنفيذ
     print(f"\n{Colors.GREEN}[+] GHENA Intelligence Cycle Started...{Colors.ENDC}")
     
-    # جلب الأهداف من الرابط
     goals = scrape_lab_goals(lab_url)
-    
-    # تنفيذ الفحص الميداني
     field_data = execute_smart_tools(target_ip)
 
-    # التحليل النهائي والحل
     print(f"{Colors.YELLOW}[⚡] Mapping Lab Goals to Field Data...{Colors.ENDC}")
     
-    final_prompt = f"""
-    أنت GHENA AI. هدفك هو حل هذا المختبر (CTF Solver).
-    
-    [أهداف المختبر من الرابط]:
-    {goals}
-    
-    [نتائج الفحص الفني]:
-    {field_data}
-    
-    بناءً على ما سبق، قدم لي تقريراً نهائياً يتضمن:
-    1. الإجابة المباشرة على كل سؤال ظهر في الرابط.
-    2. تسلسل الخطوات (Exploit Chain) التي يجب أن أقوم بها للحصول على الـ Flag.
-    3. أي ثغرات حرجة لاحظتها في مخرجات الأدوات.
-    """
+    final_prompt = f"Target IP: {target_ip}\nLab Goals: {goals}\nTools Output: {field_data}\nAnalyze and solve."
 
-    response = chat.send_message(final_prompt)
-    
-    print(f"\n{Colors.BOLD}{'='*65}{Colors.ENDC}")
-    print(f"{Colors.GREEN}🎯 GHENA'S FINAL SOLUTION & ANSWERS:{Colors.ENDC}")
-    print(response.text)
-    print(f"{Colors.BOLD}{'='*65}{Colors.ENDC}")
+    # محاولة إرسال البيانات مع معالجة خطأ RpcError (مشكلة الإنترنت)
+    try:
+        response = chat.send_message(final_prompt)
+        print(f"\n{Colors.BOLD}{'='*65}{Colors.ENDC}")
+        print(f"{Colors.GREEN}🎯 GHENA'S FINAL SOLUTION & ANSWERS:{Colors.ENDC}")
+        print(response.text)
+        print(f"{Colors.BOLD}{'='*65}{Colors.ENDC}")
+    except Exception as e:
+        print(f"{Colors.RED}[!] API Error: {e}{Colors.ENDC}")
+        print(f"{Colors.YELLOW}[i] نصيحة: تأكد من اتصال الـ Kali بالإنترنت ومن صحة مفتاح الـ API.{Colors.ENDC}")
 
 if __name__ == "__main__":
     main()
