@@ -45,33 +45,8 @@ def main():
 
     print("\n\033[94m[*] Phase 1: Nmap Scanning...\033[0m")
     try:
-       try:
-
-    genai.configure(api_key=API_KEY)
-
-    
-
-    # البحث عن الموديلات المتاحة في حسابك لتجنب خطأ 404
-
-    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-
-    
-
-    if not available_models:
-
-        print(f"{Colors.FAIL}[!] لا توجد موديلات متاحة لهذا المفتاح.{Colors.ENDC}")
-
-        sys.exit()
-
-    
-
-    # اختيار الموديل المتاح (يفضل flash إذا وجد وإلا يأخذ المتاح)
-
-    selected_model = next((m for m in available_models if "flash" in m), available_models[0])
-
-    model = genai.GenerativeModel(selected_model)
-
-    
+        # فحص سريع لضمان عدم حدوث Timeout
+        scan = subprocess.check_output(f"nmap -F {target_ip}", shell=True, text=True)
     except:
         scan = "Nmap scan failed."
 
