@@ -1,103 +1,98 @@
 import google.generativeai as genai
 import os
-import subprocess
 import sys
-import time
-import requests
-from bs4 import BeautifulSoup
+import datetime
 
-# --- [ إعدادات المحرك العصبي ] ---
-API_KEY = "ضـع_مفـتاحك_هنـا" # تأكد من وضع المفتاح الصحيح هنا
+# --- الإعدادات (Settings) ---
+# ضع مفتاح API الخاص بك هنا
+API_KEY = "ضع_مفتاحك_هنا"
 
-BANNER = r"""
-  ________  ___  ___  _______   ________   ________     
- |\   ____\|\  \|\  \|\  ___ \ |\   ___  \|\   __  \    
- \ \  \___|\ \  \\\  \ \   __/|\ \  \\ \  \ \  \|\  \   
-  \ \  \  __\ \   __  \ \  \_|/_\ \  \\ \  \ \   __  \  
-   \ \  \|\  \ \  \ \  \ \  \_|\ \ \  \\ \  \ \  \ \  \ 
-    \ \_______\ \__\ \__\ \_______\ \__\\ \__\ \__\ \__\
-     \|_______|\|__|\|__|\|_______|\|__| \|__|\|__|\|__|
-           GHENA AI | REPAIRED & STABLE EDITION
-"""
-
+# إعداد الألوان والواجهة
 class Colors:
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
     ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    CYAN = '\033[96m'
 
-# --- [ وظائف جلب البيانات والتحليل ] ---
-
-def scrape_lab_goals(url):
-    print(f"{Colors.YELLOW}[*] GHENA is accessing Lab Intelligence...{Colors.ENDC}")
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0'}
-        res = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(res.content, 'html.parser')
-        tasks = [t.get_text() for t in soup.find_all(['h3', 'h4', 'p'])]
-        return "\n".join(tasks[:20])
-    except Exception as e:
-        return f"Scraping Error: {e}"
-
-def execute_smart_tools(target_ip):
-    logs = ""
-    # 1. Nmap
-    print(f"{Colors.CYAN}[*] Step 1: Broad Reconnaissance (Nmap)...{Colors.ENDC}")
-    try:
-        nmap_cmd = f"nmap -sV --top-ports 1000 {target_ip}"
-        nmap_out = subprocess.check_output(nmap_cmd, shell=True, text=True)
-        logs += f"\n--- NMAP ---\n{nmap_out}"
-    except: logs += "\n--- NMAP: Failed ---"
-
-    # 2. Gobuster (تم إصلاح الفلاج -z ليتناسب مع نسختك)
-    if "80" in logs or "443" in logs:
-        print(f"{Colors.CYAN}[*] Step 2: Web Path Discovery (Gobuster)...{Colors.ENDC}")
-        # أزلنا فلاج -z الذي سبب لك الخطأ في الصورة
-        gobuster_cmd = f"gobuster dir -u http://{target_ip} -w /usr/share/wordlists/dirb/common.txt -q"
-        try:
-            gobuster_out = subprocess.check_output(gobuster_cmd, shell=True, text=True)
-            logs += f"\n--- GOBUSTER ---\n{gobuster_out}"
-        except: logs += "\n--- GOBUSTER: No directories found or failed ---"
-
-    return logs
-
-def main():
-    os.system('clear' if os.name == 'posix' else 'cls')
-    print(f"{Colors.CYAN}{BANNER}{Colors.ENDC}")
-
-    # تهيئة Gemini مع معالجة أخطاء الاتصال
-    try:
-        genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-pro')
-        chat = model.start_chat(history=[])
-    except Exception as e:
-        print(f"{Colors.RED}[!] Initialization Error: {e}{Colors.ENDC}")
-        return
-
-    lab_url = input(f"{Colors.BOLD}[?] Lab URL: {Colors.ENDC}")
-    target_ip = input(f"{Colors.BOLD}[?] Target IP: {Colors.ENDC}")
-
-    print(f"\n{Colors.GREEN}[+] GHENA Intelligence Cycle Started...{Colors.ENDC}")
+# --- تهيئة الاتصال الذكي ---
+try:
+    genai.configure(api_key=API_KEY)
     
-    goals = scrape_lab_goals(lab_url)
-    field_data = execute_smart_tools(target_ip)
-
-    print(f"{Colors.YELLOW}[⚡] Mapping Lab Goals to Field Data...{Colors.ENDC}")
+    # البحث التلقائي عن الموديلات المتاحة في حسابك لتجنب خطأ 404
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
     
-    final_prompt = f"Target IP: {target_ip}\nLab Goals: {goals}\nTools Output: {field_data}\nAnalyze and solve."
+    if not available_models:
+        print(f"{Colors.FAIL}[!] خطأ: لا توجد موديلات متاحة لهذا المفتاح.{Colors.ENDC}")
+        sys.exit()
+    
+    # اختيار أفضل موديل متاح (يفضل flash لأنه الأنسب لمهام الـ CTF السريعة)
+    selected_model = next((m for m in available_models if "flash" in m), available_models[0])
+    model = genai.GenerativeModel(selected_model)
+    
+except Exception as e:
+    print(f"{Colors.FAIL}[!] فشل الاتصال بـ Gemini API: {e}{Colors.ENDC}")
+    sys.exit()
 
-    # محاولة إرسال البيانات مع معالجة خطأ RpcError (مشكلة الإنترنت)
+def get_ai_analysis(prompt):
     try:
-        response = chat.send_message(final_prompt)
-        print(f"\n{Colors.BOLD}{'='*65}{Colors.ENDC}")
-        print(f"{Colors.GREEN}🎯 GHENA'S FINAL SOLUTION & ANSWERS:{Colors.ENDC}")
-        print(response.text)
-        print(f"{Colors.BOLD}{'='*65}{Colors.ENDC}")
+        response = model.generate_content(prompt)
+        return response.text
     except Exception as e:
-        print(f"{Colors.RED}[!] API Error: {e}{Colors.ENDC}")
-        print(f"{Colors.YELLOW}[i] نصيحة: تأكد من اتصال الـ Kali بالإنترنت ومن صحة مفتاح الـ API.{Colors.ENDC}")
+        if "429" in str(e):
+            return f"{Colors.WARNING}[!] تم تجاوز حد الطلبات (Quota). انتظر 20 ثانية وحاول مجدداً.{Colors.ENDC}"
+        return f"{Colors.FAIL}[!] حدث خطأ أثناء التحليل: {e}{Colors.ENDC}"
+
+def main_interface():
+    os.system('clear')
+    banner = f"""
+{Colors.CYAN}    ________  __________   _____    ___    ____
+   / ____/ / / / ____/ | / /   |  /   |  /  _/
+  / / __/ /_/ / __/ /  |/ / /| | / /| |  / /  
+ / /_/ / __  / /___/ /|  / ___ |/ ___ |_/ /   
+ \____/_/ /_/_____/_/ |_/_/  |_/_/  |_/___/   
+{Colors.OKGREEN}       GHENA AI | REPAIRED & STABLE EDITION{Colors.ENDC}
+    """
+    print(banner)
+    print(f"{Colors.OKBLUE}[+] الموديل النشط حالياً: {selected_model}{Colors.ENDC}")
+    print(f"{Colors.OKBLUE}[+] الوقت: {datetime.datetime.now().strftime('%H:%M:%S')}{Colors.ENDC}\n")
+
+    lab_url = input(f"{Colors.BOLD}[?] رابط المختبر (URL): {Colors.ENDC}")
+    target_ip = input(f"{Colors.BOLD}[?] عنوان الهدف (IP): {Colors.ENDC}")
+
+    while True:
+        print(f"\n{Colors.WARNING}--------------------------------------------------{Colors.ENDC}")
+        print(f"{Colors.BOLD}الصق مخرجات الأداة (Nmap, Gobuster, etc.) واضغط Enter مرتين للتحليل:{Colors.ENDC}")
+        
+        user_input = []
+        while True:
+            line = input()
+            if line.lower() == 'exit': sys.exit()
+            if line == '': break 
+            user_input.append(line)
+        
+        raw_data = "\n".join(user_input)
+        if not raw_data.strip(): continue
+
+        full_prompt = f"""
+        أنت خبير Pentesting ومساعد في تحديات CTF.
+        الهدف الحالي: {target_ip}
+        رابط التحدي: {lab_url}
+        المخرجات التقنية المطلوبة منك تحليلها:
+        {raw_data}
+        
+        بناءً على هذه المعطيات، قدم لي:
+        1. تحليل سريع لأهم الثغرات المحتملة.
+        2. الخطوة العملية القادمة (أمر محدد للتنفيذ).
+        3. نصيحة "خبير" لتجاوز أي جدار حماية محتمل.
+        """
+
+        print(f"\n{Colors.CYAN}[*] جاري التفكير والتحليل الذكي...{Colors.ENDC}")
+        analysis = get_ai_analysis(full_prompt)
+        print(f"\n{Colors.OKGREEN}🤖 توجيهات GHENA AI:{Colors.ENDC}\n{analysis}")
 
 if __name__ == "__main__":
-    main()
+    main_interface()
