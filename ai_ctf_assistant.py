@@ -1,51 +1,90 @@
-import google.generativeai as genai
 import os
+import subprocess
 import sys
-import datetime
+import time
 
-# --- الإعدادات ---
-API_KEY = "ضع_مفتاحك_هنا"
-
-# إعداد الألوان
-class Colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-
-# --- تهيئة الموديل (تعديل الإصدار هنا) ---
+# التحقق من المكتبة
 try:
-    genai.configure(api_key=API_KEY)
-    # قمت بتغييره من pro إلى flash ليعمل عندك فوراً
-    model = genai.GenerativeModel('gemini-1.5-flash')
-except Exception as e:
-    print(f"Error: {e}")
+    import google.generativeai as genai
+except ImportError:
+    print("\n\033[91m[!] المكتبة غير موجودة. اكتب هذا الأمر في التيرمينال أولاً:")
+    print("\033[92mpip install google-generativeai --break-system-packages\033[0m\n")
     sys.exit()
 
+import requests
+from bs4 import BeautifulSoup
+
+# --- [ الإعدادات ] ---
+API_KEY = "ضـع_مفـتاحك_هنـا"
+
+BANNER = r"""
+  ________  ___  ___  _______   ________   ________     
+ |\   ____\|\  \|\  \|\  ___ \ |\   ___  \|\   __  \    
+ \ \  \___|\ \  \\\  \ \   __/|\ \  \\ \  \ \  \|\  \   
+  \ \  \  __\ \   __  \ \  \_|/_\ \  \\ \  \ \   __  \  
+   \ \  \|\  \ \  \ \  \ \  \_|\ \ \  \\ \  \ \  \ \  \ 
+    \ \_______\ \__\ \__\ \_______\ \__\\ \__\ \__\ \__\
+     \|_______|\|__|\|__|\|_______|\|__| \|__|\|__|\|__|
+            GHENA AI | THE FINAL REPAIR v5.2
+"""
+
 def main():
-    os.system('clear')
-    print(f"{Colors.HEADER}=== GHENA AI | STABLE VERSION ==={Colors.ENDC}\n")
+    os.system('clear' if os.name == 'posix' else 'cls')
+    print(f"\033[96m{BANNER}\033[0m")
 
-    target_ip = input("[?] Target IP: ")
+    if API_KEY == "ضـع_مفـتاحك_هنـا":
+        print("\033[91m[!] تنبيه: لم تضع مفتاح الـ API داخل الكود.\033[0m")
+        return
+
+    # إعداد المحرك
+    genai.configure(api_key=API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-pro')
+
+    lab_url = input("\033[1m[?] Lab/Room URL: \033[0m")
+    target_ip = input("\033[1m[?] Target IP: \033[0m")
+
+    print("\n\033[94m[*] Phase 1: Nmap Scanning...\033[0m")
+    try:
+       try:
+
+    genai.configure(api_key=API_KEY)
+
     
-    while True:
-        print(f"\n{Colors.WARNING}الصق المخرجات هنا (Enter مرتين للتحليل):{Colors.ENDC}")
-        user_input = []
-        while True:
-            line = input()
-            if line.lower() == 'exit': sys.exit()
-            if line == '': break 
-            user_input.append(line)
-        
-        raw_data = "\n".join(user_input)
-        if not raw_data.strip(): continue
 
-        print(f"\n{Colors.OKBLUE}[*] جاري التحليل...{Colors.ENDC}")
-        response = model.generate_content(f"Target: {target_ip}\nAnalyze this:\n{raw_data}")
-        print(f"\n{Colors.OKGREEN}🤖 التوجيهات:{Colors.ENDC}\n{response.text}")
+    # البحث عن الموديلات المتاحة في حسابك لتجنب خطأ 404
+
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+
+    
+
+    if not available_models:
+
+        print(f"{Colors.FAIL}[!] لا توجد موديلات متاحة لهذا المفتاح.{Colors.ENDC}")
+
+        sys.exit()
+
+    
+
+    # اختيار الموديل المتاح (يفضل flash إذا وجد وإلا يأخذ المتاح)
+
+    selected_model = next((m for m in available_models if "flash" in m), available_models[0])
+
+    model = genai.GenerativeModel(selected_model)
+
+    
+    except:
+        scan = "Nmap scan failed."
+
+    print("\033[93m[⚡] Analyzing with GHENA Neural Engine...\033[0m")
+    
+    prompt = f"Target: {target_ip}\nLab: {lab_url}\nScan Results:\n{scan}\nSolve the lab questions."
+
+    try:
+        response = model.generate_content(prompt)
+        print(f"\n\033[92m🎯 GHENA SOLUTION:\033[0m\n{response.text}")
+    except Exception as e:
+        print(f"\n\033[91m[!] حدث خطأ في الاتصال: {e}")
+        print("\033[93m[i] تأكد من ضبط وقت وساعة النظام، ومن صحة مفتاح الـ API.\033[0m")
 
 if __name__ == "__main__":
     main()
