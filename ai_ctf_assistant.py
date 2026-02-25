@@ -1,15 +1,18 @@
 import google.generativeai as genai
 import os
+import subprocess
 import sys
 import time
-import datetime
+import requests
+from bs4 import BeautifulSoup
 
-# ==========================================
-# --- إعدادات المحرك (Configuration) ---
-# ==========================================
-API_KEY = "ضـع_مفـتاحك_هنـا"  # استبدله بمفتاح API الخاص بك
+# --- [ إعدادات المحرك العصبي ] ---
+API_KEY = "ضـع_مفـتاحك_هنـا"
+# الكوكيز الخاصة بمتصفحك (اختياري لقراءة الغرف الخاصة)
+SESSION_COOKIES = {
+    "connect.sid": "ضـع_الـكوكـي_هنـا_إذا_لزم_الأمـر" 
+}
 
-# شعار GHENA المخصص (ASCII ART)
 BANNER = r"""
   ________  ___  ___  _______   ________   ________     
  |\   ____\|\  \|\  \|\  ___ \ |\   ___  \|\   __  \    
@@ -18,118 +21,101 @@ BANNER = r"""
    \ \  \|\  \ \  \ \  \ \  \_|\ \ \  \\ \  \ \  \ \  \ 
     \ \_______\ \__\ \__\ \_______\ \__\\ \__\ \__\ \__\
      \|_______|\|__|\|__|\|_______|\|__| \|__|\|__|\|__|
-            GHENA AI - NEURAL STRATEGIC ENGINE
+           GHENA AI | FULL AUTONOMOUS SOLUTION
 """
 
 class Colors:
     CYAN = '\033[96m'
     GREEN = '\033[92m'
     YELLOW = '\033[93m'
-    MAGENTA = '\033[95m'
     RED = '\033[91m'
     BOLD = '\033[1m'
     ENDC = '\033[0m'
 
-# ==========================================
-# --- الوظائف الحركية والبصرية ---
-# ==========================================
+# --- [ وظائف جلب البيانات والتحليل ] ---
 
-def loading_animation():
-    """تأثير بصري لبدء تشغيل النظام"""
-    os.system('clear' if os.name == 'posix' else 'cls')
-    print(f"{Colors.MAGENTA}{Colors.BOLD}Initializing GHENA AI Strategic Modules...{Colors.ENDC}")
-    animation = ["□□□□□", "■□□□□", "■■□□□", "■■■□□", "■■■■□", "■■■■■"]
-    for i in range(len(animation)):
-        time.sleep(0.3)
-        sys.stdout.write(f"\r{Colors.CYAN}[{animation[i]}] Booting Neural Pathways...{Colors.ENDC}")
-        sys.stdout.flush()
-    print("\n")
-
-def get_strategy(chat_session, output, target_info):
-    """إرسال البيانات للمحرك العصبي وتحليلها"""
-    system_instruction = f"""
-    أنت الآن 'GHENA AI' مساعد خبير في الأمن السيبراني وتحديات CTF.
-    الهدف الحالي: {target_info}
-    
-    مهمتك:
-    1. تحليل المخرجات تقنياً واستخراج الثغرات (CVEs).
-    2. ربط المعلومات ببعضها (Correlation).
-    3. اقتراح الخطوات القادمة بأوامر جاهزة تبدأ بـ 👉.
-    4. شرح مبسط باللغة العربية بجانب كل أمر تقني.
-    """
+def scrape_lab_goals(url):
+    """سحب الأسئلة والمهام من رابط المختبر"""
+    print(f"{Colors.YELLOW}[*] GHENA is accessing Lab Intelligence...{Colors.ENDC}")
     try:
-        response = chat_session.send_message(f"{system_instruction}\n\nالمخرجات الجديدة:\n{output}")
-        return response.text
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        # محاولة الدخول بالكوكيز إذا كانت متوفرة
+        res = requests.get(url, headers=headers, cookies=SESSION_COOKIES, timeout=10)
+        soup = BeautifulSoup(res.content, 'html.parser')
+        
+        # استخراج العناوين والأسئلة (تخصيص لمنصات الـ CTF)
+        tasks = [t.get_text() for t in soup.find_all(['h3', 'h4', 'p'])]
+        return "\n".join(tasks[:20]) # نكتفي بأهم الأجزاء لفهم الأهداف
     except Exception as e:
-        return f"{Colors.RED}Error in Neural Engine: {e}{Colors.ENDC}"
+        return f"Scraping Error: {e}"
 
-# ==========================================
-# --- الدورة الأساسية للبرنامج ---
-# ==========================================
+def execute_smart_tools(target_ip):
+    """تشغيل الأدوات بشكل تسلسلي ذكي"""
+    logs = ""
+    
+    # 1. Nmap (أساسي دائماً)
+    print(f"{Colors.CYAN}[*] Step 1: Broad Reconnaissance (Nmap)...{Colors.ENDC}")
+    nmap_cmd = f"nmap -sV --top-ports 1000 {target_ip}"
+    nmap_out = subprocess.check_output(nmap_cmd, shell=True, text=True)
+    logs += f"\n--- NMAP ---\n{nmap_out}"
+
+    # 2. اتخاذ قرار ذكي بناءً على المنافذ
+    if "80" in nmap_out or "443" in nmap_out:
+        print(f"{Colors.CYAN}[*] Step 2: Web Path Discovery (Gobuster)...{Colors.ENDC}")
+        gobuster_cmd = f"gobuster dir -u http://{target_ip} -w /usr/share/wordlists/dirb/common.txt -z -q"
+        try:
+            gobuster_out = subprocess.check_output(gobuster_cmd, shell=True, text=True)
+            logs += f"\n--- GOBUSTER ---\n{gobuster_out}"
+        except: logs += "\n--- GOBUSTER: No directories found ---"
+
+    return logs
 
 def main():
-    # 1. تشغيل المؤثرات البصرية
-    loading_animation()
-    print(f"{Colors.CYAN}{Colors.BOLD}{BANNER}{Colors.ENDC}")
-    print(f"{Colors.MAGENTA}{'='*65}{Colors.ENDC}")
+    os.system('clear' if os.name == 'posix' else 'cls')
+    print(f"{Colors.CYAN}{BANNER}{Colors.ENDC}")
 
-    # 2. تهيئة الاتصال بـ Gemini
-    try:
-        if API_KEY == "ضـع_مفـتاحك_هنـا":
-            print(f"{Colors.RED}[!] Error: Please set your API_KEY in the script!{Colors.ENDC}")
-            return
-        
-        genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro",
-            generation_config={"temperature": 0.2, "max_output_tokens": 4096}
-        )
-        chat = model.start_chat(history=[])
-    except Exception as e:
-        print(f"{Colors.RED}[!] Connection Failed: {e}{Colors.ENDC}")
-        return
+    # تهيئة Gemini 1.5 Pro
+    genai.configure(api_key=API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-pro')
+    chat = model.start_chat(history=[])
 
-    # 3. إدخال بيانات الهدف
-    target_ip = input(f"{Colors.YELLOW}{Colors.BOLD}[?] Target IP/Domain: {Colors.ENDC}")
-    platform = input(f"{Colors.YELLOW}{Colors.BOLD}[?] Platform (HTB/THM): {Colors.ENDC}")
-    target_info = f"IP: {target_ip}, Platform: {platform}"
+    # مدخلات المستخدم
+    lab_url = input(f"{Colors.BOLD}[?] Lab URL: {Colors.ENDC}")
+    target_ip = input(f"{Colors.BOLD}[?] Target IP: {Colors.ENDC}")
 
-    print(f"\n{Colors.GREEN}[+] GHENA Engine is LIVE. Send your tool outputs.{Colors.ENDC}")
+    # التنفيذ
+    print(f"\n{Colors.GREEN}[+] GHENA Intelligence Cycle Started...{Colors.ENDC}")
+    
+    # جلب الأهداف من الرابط
+    goals = scrape_lab_goals(lab_url)
+    
+    # تنفيذ الفحص الميداني
+    field_data = execute_smart_tools(target_ip)
 
-    while True:
-        print(f"\n{Colors.CYAN}📥 Paste tool output below (Press Enter twice to analyze):{Colors.ENDC}")
-        
-        user_input = []
-        while True:
-            line = sys.stdin.readline().rstrip()
-            if line == '': break
-            user_input.append(line)
-        
-        full_output = "\n".join(user_input)
-        
-        if full_output.lower() == 'exit': 
-            print(f"{Colors.MAGENTA}Shutting down GHENA AI... Goodbye!{Colors.ENDC}")
-            break
-            
-        if not full_output.strip(): continue
+    # التحليل النهائي والحل
+    print(f"{Colors.YELLOW}[⚡] Mapping Lab Goals to Field Data...{Colors.ENDC}")
+    
+    final_prompt = f"""
+    أنت GHENA AI. هدفك هو حل هذا المختبر (CTF Solver).
+    
+    [أهداف المختبر من الرابط]:
+    {goals}
+    
+    [نتائج الفحص الفني]:
+    {field_data}
+    
+    بناءً على ما سبق، قدم لي تقريراً نهائياً يتضمن:
+    1. الإجابة المباشرة على كل سؤال ظهر في الرابط.
+    2. تسلسل الخطوات (Exploit Chain) التي يجب أن أقوم بها للحصول على الـ Flag.
+    3. أي ثغرات حرجة لاحظتها في مخرجات الأدوات.
+    """
 
-        print(f"\n{Colors.MAGENTA}[⚡] GHENA is calculating attack vectors...{Colors.ENDC}")
-        
-        # 4. الحصول على التحليل
-        start_time = time.time()
-        analysis = get_strategy(chat, full_output, target_info)
-        end_time = time.time()
-
-        # 5. عرض النتائج بتنسيق احترافي
-        print(f"\n{Colors.BOLD}{'—'*65}{Colors.ENDC}")
-        # تلوين الأوامر المقترحة لجعلها بارزة
-        formatted_analysis = analysis.replace("👉", f"{Colors.GREEN}{Colors.BOLD}👉{Colors.ENDC}{Colors.BOLD}")
-        print(formatted_analysis)
-        print(f"\n{Colors.BOLD}{'—'*65}{Colors.ENDC}")
-        print(f"{Colors.CYAN}Processing Time: {round(end_time - start_time, 2)}s | Model: Gemini 1.5 Pro{Colors.ENDC}")
+    response = chat.send_message(final_prompt)
+    
+    print(f"\n{Colors.BOLD}{'='*65}{Colors.ENDC}")
+    print(f"{Colors.GREEN}🎯 GHENA'S FINAL SOLUTION & ANSWERS:{Colors.ENDC}")
+    print(response.text)
+    print(f"{Colors.BOLD}{'='*65}{Colors.ENDC}")
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print(f"\n{Colors.RED}[!] Session Terminated.{Colors.ENDC}")
+    main()
