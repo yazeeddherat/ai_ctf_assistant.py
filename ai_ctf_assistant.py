@@ -3,10 +3,11 @@ import os
 import sys
 import requests
 import subprocess
+import time
 from bs4 import BeautifulSoup
 
 # --- [ الإعدادات - SETTINGS ] ---
-API_KEY = "AIzaSyBe_ZTiXXbCy_t_OqURaR11NHr4C-Nz9F8"
+API_KEY = "ضـع_مفـتاحك_هنـا"
 COOKIES = {"connect.sid": "ضـع_الـكوكـي_هنـا_اختياري"}
 
 class Colors:
@@ -18,7 +19,6 @@ class Colors:
     FAIL = '\033[91m'
     ENDC = '\033[0m'
 
-# واجهة الأداة عند التشغيل
 BANNER = f"""
 {Colors.CYAN}###############################################################
 #                                                             #
@@ -29,70 +29,78 @@ BANNER = f"""
 #   {Colors.GREEN} ╚██████╔╝██║  ██║███████╗██║ ╚████║██║  ██║ ██║  {Colors.CYAN}       #
 #   {Colors.GREEN}  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═╝  {Colors.CYAN}       #
 #                                                             #
-#            {Colors.YELLOW}--- GHENA AI: THE LAB-DRIVEN SOLVER ---{Colors.CYAN}          #
+#            {Colors.YELLOW}--- GHENA AI: MULTI-ENGINE AUTO-SOLVER ---{Colors.CYAN}        #
 ###############################################################{Colors.ENDC}
 """
 
-# إعداد الموديل
-try:
+def initialize_engine():
+    """وظيفة فحص وتجربة نسخ جيميني حتى إيجاد نسخة شغالة"""
+    print(f"{Colors.YELLOW}[*] جاري فحص نسخ Gemini المتاحة في حسابك...{Colors.ENDC}")
     genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel(
-        model_name='gemini-1.5-flash',
-        safety_settings=[{"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}],
-        generation_config={"temperature": 0.1}
-    )
-except Exception as e:
-    print(f"Error: {e}"); sys.exit()
+    
+    # قائمة النسخ التي نريد تجربتها بالترتيب
+    model_candidates = [
+        'gemini-1.5-flash', 
+        'gemini-1.5-pro', 
+        'gemini-1.0-pro'
+    ]
+    
+    selected_model = None
+    
+    for model_name in model_candidates:
+        try:
+            print(f"{Colors.CYAN}[?] تجربة النسخة: {model_name}...{Colors.ENDC}", end="\r")
+            test_model = genai.GenerativeModel(model_name)
+            # تجربة إرسال نص بسيط جداً للتأكد من الشغال
+            test_model.generate_content("ping", generation_config={"max_output_tokens": 1})
+            selected_model = test_model
+            print(f"{Colors.GREEN}[+] تم العثور على نسخة شغالة: {model_name}          {Colors.ENDC}")
+            return selected_model, model_name
+        except Exception:
+            continue
+            
+    if not selected_model:
+        print(f"{Colors.FAIL}\n[!] لم يتم العثور على أي نسخة شغالة. تأكد من الـ API KEY ومن الإنترنت.{Colors.ENDC}")
+        sys.exit()
 
 def fetch_lab_context(url):
     try:
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, cookies=COOKIES, timeout=10)
         soup = BeautifulSoup(res.content, 'html.parser')
-        # تركيز البحث على "Tasks" و "Instructions"
         return "\n".join([el.get_text() for el in soup.find_all(['h3', 'h4', 'p', 'li', 'code'])])[:6000]
-    except: return "Manual Mode: Please provide lab instructions."
+    except: return "Manual Mode"
 
 def main():
     os.system('clear' if os.name == 'posix' else 'cls')
     print(BANNER)
 
-    lab_url = input(f"{Colors.BOLD}[?] رابط اللاب (Lab URL): {Colors.ENDC}")
+    # 1. اختيار المحرك تلقائياً
+    model, engine_name = initialize_engine()
+
+    lab_url = input(f"\n{Colors.BOLD}[?] رابط اللاب (Lab URL): {Colors.ENDC}")
     target_ip = input(f"{Colors.BOLD}[?] IP الهدف (Target IP): {Colors.ENDC}")
     
-    print(f"{Colors.YELLOW}[*] GHENA is reading lab requirements...{Colors.ENDC}")
+    print(f"{Colors.YELLOW}[*] قراءة متطلبات اللاب من الرابط...{Colors.ENDC}")
     lab_context = fetch_lab_context(lab_url)
 
-    print(f"{Colors.GREEN}[+] تمت قراءة السيناريو. سألتزم بالأدوات والخطوات التي يطلبها اللاب فقط.{Colors.ENDC}")
+    print(f"{Colors.GREEN}[+] تم الربط بنجاح. سألتزم بتعليمات اللاب وأحل الأسئلة تلقائياً.{Colors.ENDC}")
 
     while True:
         print(f"\n{Colors.CYAN}{'='*60}{Colors.ENDC}")
         
-        # برومبت يطلب من AI تحديد الخطوة القادمة بناءً على "تعليمات اللاب"
-        instruction_prompt = f"""
-        أنت مساعد خبير في حل لابات CTF. التزم حرفياً بتعليمات اللاب المقدمة لك.
-        تعليمات اللاب: {lab_context}
-        الهدف: {target_ip}
-
-        بناءً على ما يطلبه اللاب في هذه المرحلة، ما هو الأمر الذي يجب تنفيذه الآن؟ 
-        اجعل إجابتك تبدأ بـ 'NEXT_STEP:' متبوعاً بالأمر.
-        """
+        # برومبت تعليمات اللاب
+        prompt_instruction = f"بناءً على تعليمات اللاب: {lab_context}\nما هو الأمر التالي الذي يطلبه اللاب للهدف {target_ip}؟ ابدأ بـ NEXT_STEP:"
         
         try:
-            ai_instruction = model.generate_content(instruction_prompt).text
-            print(f"{Colors.HEADER}🤖 تعليمات اللاب الحالية:{Colors.ENDC}")
-            print(ai_instruction)
-            
-            # استخراج الأمر المقترح من اللاب
+            ai_instruction = model.generate_content(prompt_instruction).text
             if "NEXT_STEP:" in ai_instruction:
-                suggested_cmd = ai_instruction.split("NEXT_STEP:")[1].split("\n")[0].strip()
-                choice = input(f"\n{Colors.WARNING}[!] اللاب يطلب تنفيذ: {Colors.BOLD}{suggested_cmd}{Colors.ENDC}\nهل تريد التنفيذ؟ (y/n): ")
-                if choice.lower() == 'y':
-                    os.system(suggested_cmd)
-        
-        except Exception as e:
-            print(f"Error: {e}")
+                cmd = ai_instruction.split("NEXT_STEP:")[1].split("\n")[0].strip()
+                print(f"{Colors.HEADER}🤖 المهمة المطلوبة حالياً:{Colors.ENDC}\n{ai_instruction}")
+                choice = input(f"\n{Colors.WARNING}[!] هل تريد تنفيذ {cmd}؟ (y/n): {Colors.ENDC}")
+                if choice.lower() == 'y': os.system(cmd)
+        except Exception as e: print(f"Error: {e}")
 
-        print(f"\n{Colors.YELLOW}الصق مخرجات الأمر هنا لتحليل النتائج وحل الأسئلة (Enter مرتين):{Colors.ENDC}")
+        print(f"\n{Colors.YELLOW}الصق مخرجات الأمر لتحليلها وحل السؤال (Enter مرتين):{Colors.ENDC}")
         lines = []
         while True:
             line = input()
@@ -102,25 +110,14 @@ def main():
         
         user_output = "\n".join(lines)
         
-        # تحليل النتائج واستخراج الأجوبة
-        analysis_prompt = f"""
-        بناءً على تعليمات اللاب: {lab_context}
-        ومخرجات الأداة: {user_output}
-        
-        استخرج الإجابة المطلوبة للسؤال الحالي في اللاب.
-        إذا وجدت كلمة مرور أو Flag، حدد أي سؤال يحل.
-        التنسيق:
-        ✅ جواب السؤال (X): [الإجابة]
-        🔑 Credentials: [يوزر:باسورد إن وجد]
-        👉 الخطوة القادمة حسب اللاب: [وصف]
-        """
+        # برومبت حل الأسئلة
+        prompt_solve = f"تعليمات اللاب: {lab_context}\nالمخرجات: {user_output}\nاستخرج جواب السؤال المطلوب في اللاب الآن بصيغة ✅ جواب السؤال:"
         
         try:
-            analysis_res = model.generate_content(analysis_prompt).text
-            print(f"\n{Colors.OKGREEN}🎯 تحليل النتائج وحل الأسئلة:{Colors.ENDC}\n")
-            print(analysis_res)
-        except Exception as e:
-            print(f"Analysis Error: {e}")
+            analysis = model.generate_content(prompt_solve).text
+            print(f"\n{Colors.OKGREEN}🎯 تحليل غنى واستخراج الأجوبة:{Colors.ENDC}\n")
+            print(analysis)
+        except Exception as e: print(f"Analysis Error: {e}")
 
 if __name__ == "__main__":
     main()
