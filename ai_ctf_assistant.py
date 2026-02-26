@@ -1,105 +1,204 @@
-import google.generativeai as genai
 import os
+import subprocess
 import sys
 import requests
-import datetime
-import subprocess
 from bs4 import BeautifulSoup
+import re
 
-# --- [ الإعدادات - SETTINGS ] ---
-API_KEY = "ضـع_مفـتاحك_هنـا"
+# =======================
+# Configuration
+# =======================
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
-COOKIES = {"connect.sid": "ضـع_الـكوكـي_هنـا_اختياري"}
-
-class Colors:
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    HEADER = '\033[95m'
-    BOLD = '\033[1m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-
-BANNER = r"""
-  ________  ___  ___  _______   ________   ________     
- |\   ____\|\  \|\  \|\  ___ \ |\   ___  \|\   __  \    
- \ \  \___|\ \  \\\  \ \   __/|\ \  \\ \  \ \  \|\  \   
-  \ \  \  __\ \   __  \ \  \_|/_\ \  \\ \  \ \   __  \  
-   \ \  \|\  \ \  \ \  \ \  \_|\ \ \  \\ \  \ \  \ \  \ 
-    \ \_______\ \__\ \__\ \_______\ \__\\ \__\ \__\ \__\
-     \|_______|\|__|\|__|\|_______|\|__| \|__|\|__|\|__|
-            GHENA AI | FTP & ANONYMOUS DETECTOR
-"""
-
-# --- [ إعداد المحرك الذكي ] ---
-try:
-    genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel(
-        model_name='gemini-1.5-flash',
-        safety_settings=[{"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}],
-        generation_config={"temperature": 0.1}
-    )
-except Exception as e:
-    print(f"{Colors.FAIL}[!] Error: {e}{Colors.ENDC}"); sys.exit()
-
-def fetch_lab_content(url):
+# =======================
+# Utils
+# =======================
+def run_cmd(cmd_list, timeout=30):
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, cookies=COOKIES, timeout=10)
-        soup = BeautifulSoup(res.content, 'html.parser')
-        return "\n".join([el.get_text() for el in soup.find_all(['h3', 'h4', 'p', 'li', 'code'])])[:5000]
-    except: return "Manual Context"
+        return subprocess.check_output(
+            cmd_list,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout
+        )
+    except Exception as e:
+        return f"[ERROR] {e}"
 
+# =======================
+# 1) Scrape lab questions
+# =======================
+def extract_questions(lab_url):
+    res = requests.get(lab_url, headers=HEADERS, timeout=15)
+    soup = BeautifulSoup(res.text, "html.parser")
+
+    questions = []
+    for tag in soup.find_all(["li", "p", "h3", "h4"]):
+        text = tag.get_text(strip=True)
+        if "?" in text:
+            questions.append(text)
+
+    # تنظيف
+    cleaned = []
+    for q in questions:
+        if len(q) > 10 and len(q) < 200:
+            cleaned.append(q)
+
+    return cleaned
+
+# =======================
+# 2) Nmap Recon
+# =======================
+def run_nmap(target):
+    return run_cmd(["nmap", "-sV", "--top-ports", "1000", target])
+
+def parse_open_ports(nmap_out):
+    ports = []
+    for line in nmap_out.splitlines():
+        if "/tcp" in line and "open" in line:
+            ports.append(line.split()[0])
+    return ports
+
+def service_on_port(nmap_out, port):
+    for line in nmap_out.splitlines():
+        if line.startswith(f"{port}/tcp"):
+            return line
+    return "Unknown"
+
+# =======================
+# 3) FTP Anonymous Check
+# =======================
+def ftp_anonymous_enabled(target):
+    try:
+        cmd = (
+            f'echo -e "USER anonymous\\nPASS anonymous\\nQUIT" | '
+            f'ftp -n {target}'
+        )
+        out = subprocess.check_output(cmd, shell=True, text=True, timeout=10)
+        return "230" in out, out
+    except:
+        return False, ""
+
+def ftp_list_files(target):
+    cmd = (
+        f'echo -e "USER anonymous\\nPASS anonymous\\nls\\nQUIT" | '
+        f'ftp -n {target}'
+    )
+    return subprocess.check_output(cmd, shell=True, text=True)
+
+# =======================
+# 4) Hydra Output Parser
+# =======================
+def parse_hydra_output(path):
+    creds = []
+    if not os.path.exists(path):
+        return creds
+
+    with open(path, "r", errors="ignore") as f:
+        for line in f:
+            if "login:" in line and "password:" in line:
+                user = re.search(r"login:\s*(\S+)", line)
+                pwd = re.search(r"password:\s*(\S+)", line)
+                if user and pwd:
+                    creds.append({
+                        "user": user.group(1),
+                        "password": pwd.group(1)
+                    })
+    return creds
+
+# =======================
+# 5) Answer Engine
+# =======================
+def answer_questions(questions, nmap_out, ftp_info, hydra_creds):
+    answers = []
+    open_ports = parse_open_ports(nmap_out)
+
+    for idx, q in enumerate(questions, 1):
+        ql = q.lower()
+        ans = "Not found"
+
+        # عدد البورتات
+        if "how many" in ql and "port" in ql:
+            ans = str(len(open_ports))
+
+        # سيرفس على بورت
+        elif "service" in ql and "port" in ql:
+            p = re.search(r"port\s+(\d+)", ql)
+            if p:
+                ans = service_on_port(nmap_out, p.group(1))
+
+        # FTP Anonymous
+        elif "ftp" in ql and "anonymous" in ql:
+            ans = "Enabled" if ftp_info["anon"] else "Disabled"
+
+        # Password
+        elif "password" in ql:
+            if hydra_creds:
+                ans = hydra_creds[0]["password"]
+            else:
+                ans = "Not found"
+
+        answers.append((idx, q, ans))
+
+    return answers
+
+# =======================
+# MAIN
+# =======================
 def main():
-    os.system('clear' if os.name == 'posix' else 'cls')
-    print(f"{Colors.CYAN}{Colors.BOLD}{BANNER}{Colors.ENDC}")
+    print("=== GHENA CTF LAB SOLVER ===\n")
 
-    lab_url = input(f"{Colors.BOLD}[?] رابط اللاب: {Colors.ENDC}")
-    target_ip = input(f"{Colors.BOLD}[?] IP الهدف: {Colors.ENDC}")
-    lab_context = fetch_lab_content(lab_url)
+    lab_url = input("[?] Lab URL: ").strip()
+    target = input("[?] Target IP: ").strip()
 
-    print(f"\n{Colors.GREEN}[+] تم تحميل الأهداف. GHENA تراقب الآن منافذ FTP والـ Anonymous...{Colors.ENDC}")
+    print("\n[*] Extracting lab questions...")
+    questions = extract_questions(lab_url)
 
-    while True:
-        print(f"\n{Colors.YELLOW}{'—'*60}{Colors.ENDC}")
-        print(f"الصق مخرج الأداة (Nmap مثلاً):")
-        
-        lines = []
-        while True:
-            line = input()
-            if line.lower() == 'exit': sys.exit()
-            if line == '': break
-            lines.append(line)
-        
-        user_output = "\n".join(lines)
-        if not user_output.strip(): continue
+    print("[*] Running Nmap...")
+    nmap_out = run_nmap(target)
 
-        # تحليل إضافي من "غنى" للبحث عن FTP Anonymous
-        print(f"\n{Colors.CYAN}[⚡] GHENA AI is analyzing service configurations...{Colors.ENDC}")
+    print("[*] Checking FTP anonymous access...")
+    anon, ftp_raw = ftp_anonymous_enabled(target)
+    ftp_files = ftp_list_files(target) if anon else ""
 
-        prompt = f"""
-        أنت GHENA AI، خبير اختراق متقدم.
-        الأسئلة المطلوبة: {lab_context}
-        المخرجات: {user_output}
-        الهدف: {target_ip}
+    print("\n[?] Enter Hydra command you used (for reference only):")
+    hydra_cmd = input("> ")
 
-        مهمتك الخاصة:
-        1. إذا رأيت بورت 21 مفتوحاً (FTP)، تحقق من مخرج Nmap إذا كان يذكر 'Anonymous FTP login allowed'.
-        2. إذا كان مسموحاً، أخبر المستخدم فوراً: "⚠️ تنبيه: منفذ FTP يسمح بالدخول المجهول!" واعطه الجواب إذا كان هناك سؤال متعلق بذلك.
-        3. استخرج أي باسوردات أو يوزرات تظهر في المخرجات.
-        
-        التنسيق:
-        ✅ جواب السؤال (رقم X): [الحل]
-        🔓 حالة الخدمة: [مثال: FTP Anonymous Allowed]
-        👉 اكتب هذا الأمر: [الأمر اللازم للدخول أو الفحص]
-        🔑 Credentials: [أي يوزر أو باسورد مستخرج]
-        """
+    print("[?] Enter Hydra output file path (or leave empty):")
+    hydra_path = input("> ").strip()
 
-        try:
-            response = model.generate_content(prompt)
-            print(f"\n{Colors.HEADER}🤖 تحليل غنى الذكي:{Colors.ENDC}\n")
-            print(response.text)
-        except Exception as e:
-            print(f"{Colors.FAIL}[!] Error: {e}{Colors.ENDC}")
+    hydra_creds = parse_hydra_output(hydra_path) if hydra_path else []
+
+    ftp_info = {
+        "anon": anon,
+        "files": ftp_files
+    }
+
+    answers = answer_questions(
+        questions,
+        nmap_out,
+        ftp_info,
+        hydra_creds
+    )
+
+    # =======================
+    # OUTPUT
+    # =======================
+    print("\n==============================")
+    print("LAB ANSWERS")
+    print("==============================\n")
+
+    for idx, q, ans in answers:
+        print(f"Question {idx}:")
+        print(q)
+        print(f"→ Answer: {ans}\n")
+
+    if anon:
+        print("[FTP Anonymous Files]")
+        print(ftp_files)
+
+    print("==============================")
 
 if __name__ == "__main__":
     main()
