@@ -7,7 +7,7 @@ import time
 from bs4 import BeautifulSoup
 
 # --- [ الإعدادات - SETTINGS ] ---
-API_KEY = "ضـع_مفـتاحك_هنـا"
+API_KEY = "AIzaSyBe_ZTiXXbCy_t_OqURaR11NHr4C-Nz9F8"
 COOKIES = {"connect.sid": "ضـع_الـكوكـي_هنـا_اختياري"}
 
 class Colors:
