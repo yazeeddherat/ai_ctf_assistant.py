@@ -1,12 +1,12 @@
-import google.generativeai as genai
 import os
 import sys
 import requests
 from bs4 import BeautifulSoup
+from openai import OpenAI
 
 # --- [ الإعدادات - SETTINGS ] ---
-# ضع مفتاح الـ API الخاص بك هنا
-API_KEY = "AIzaSyDmm3sH2JC4PJDLJwUP47DQbX3zqCrcNDA"
+# ضع مفتاح الـ API الخاص بك من OpenAI هنا
+API_KEY = "sk-your-openai-api-key-here"
 
 class Colors:
     CYAN = '\033[96m'
@@ -32,17 +32,20 @@ BANNER = f"""
 """
 
 def initialize_ghena():
-    print(f"{Colors.YELLOW}[*] جاري الاتصال بمحرك جوجل وتفعيل المفتاح...{Colors.ENDC}")
+    print(f"{Colors.YELLOW}[*] جاري الاتصال بمحرك الذكاء الاصطناعي (OpenAI) وتفعيل المفتاح...{Colors.ENDC}")
     try:
-        genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        # إصلاح تمرير الإعدادات لتتوافق مع جميع إصدارات المكتبة
-        response = model.generate_content("Ping", generation_config=genai.types.GenerationConfig(max_output_tokens=10))
+        client = OpenAI(api_key=API_KEY)
+        # اختبار استجابة سريع للتأكد من صحة المفتاح
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": "Ping"}],
+            max_tokens=10
+        )
         print(f"{Colors.GREEN}[+] تم التفعيل بنجاح! المحرك مستعد لحل اللاب.{Colors.ENDC}")
-        return model
+        return client
     except Exception as e:
         print(f"{Colors.FAIL}[!] خطأ في التشغيل: {e}{Colors.ENDC}")
-        print(f"{Colors.CYAN}[i] تأكد من تنفيذ: pip install -U google-generativeai --break-system-packages{Colors.ENDC}")
+        print(f"{Colors.CYAN}[i] تأكد من مفتاح الـ API ومن تنفيذ: pip install openai{Colors.ENDC}")
         sys.exit()
 
 def fetch_lab_task(url):
@@ -56,7 +59,7 @@ def main():
     os.system('clear' if os.name == 'posix' else 'cls')
     print(BANNER)
 
-    model = initialize_ghena()
+    client = initialize_ghena()
 
     try:
         lab_url = input(f"\n{Colors.BOLD}[?] رابط اللاب: {Colors.ENDC}")
@@ -74,7 +77,6 @@ def main():
         lines = []
         empty_lines_count = 0
         
-        # --- [ تم إصلاح مشكلة قراءة الأسطر المتعددة هنا ] ---
         while True:
             try:
                 line = input()
@@ -84,7 +86,7 @@ def main():
                 if line == '':
                     empty_lines_count += 1
                     if empty_lines_count >= 2:
-                        break # الخروج فقط عند وجود سطرين فارغين متتاليين (Enter مرتين)
+                        break
                 else:
                     empty_lines_count = 0
                 
@@ -115,10 +117,13 @@ def main():
 
         try:
             print(f"\n{Colors.HEADER}🤖 تحليل غنى الذكي:{Colors.ENDC}")
-            result = model.generate_content(prompt)
-            print(result.text)
+            response = client.chat.completions.create(
+                model="gpt-4o", # يمكنك تغييره إلى gpt-3.5-turbo إذا أردت
+                messages=[
+                    {"role": "system", "content": "أنت مساعد ذكي ومحترف في حل تحديات الأمن السيبراني."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            print(response.choices[0].message.content)
         except Exception as e:
-            print(f"{Colors.FAIL}[!] فشل التحليل: {e}{Colors.ENDC}")
-
-if __name__ == "__main__":
-    main()
+            print(f"{Colors
