@@ -1,169 +1,142 @@
-#!/usr/bin/env python3
-# GHENA-AUTO v1.0 — Educational CTF/Labs Framework
+import os
+import sys
+import re
+import time
+import subprocess
 
-import os, sys, re, subprocess, time, requests
-from bs4 import BeautifulSoup
+# --- [ إعدادات الألوان والواجهة ] ---
+class Colors:
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    HEADER = '\033[95m'
+    ENDC = '\033[0m'
 
-# =========================
-# UI (ألوان + Banner)
-# =========================
-class C:
-    G="\033[92m"; C="\033[96m"; Y="\033[93m"; R="\033[91m"; B="\033[1m"; E="\033[0m"
-
-BANNER=f"""
-{C.C}████████████████████████████████████████████████████████████████
-█ {C.G}GHENA-AUTO{C.C} — Metasploit-like CTF/Lab Solver (EDU)           █
-█ Mode: Modules / Sessions | Smart Question Matching              █
-████████████████████████████████████████████████████████████████{C.E}
+BANNER = f"""
+{Colors.CYAN}###############################################################
+#                                                             #
+#   {Colors.GREEN}  ██████╗ ██╗  ██╗███████╗███╗   ██╗ █████╗  ██╗  {Colors.CYAN}       #
+#   {Colors.GREEN} ██╔════╝ ██║  ██║██╔════╝████╗  ██║██╔══██╗ ██║  {Colors.CYAN}       #
+#   {Colors.GREEN} ██║  ███╗███████║█████╗  ██╔██╗ ██║███████║ ██║  {Colors.CYAN}       #
+#   {Colors.GREEN} ██║   ██║██╔══██║██╔══╝  ██║╚██╗██║██╔══██║ ██║  {Colors.CYAN}       #
+#   {Colors.GREEN} ╚██████╔╝██║  ██║███████╗██║ ╚████║██║  ██║ ██║  {Colors.CYAN}       #
+#   {Colors.GREEN}  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═╝  {Colors.CYAN}       #
+#                                                             #
+#      {Colors.YELLOW}--- GHENA AI: THE ULTIMATE CTF AUTO-SOLVER ---{Colors.CYAN}         #
+#            (No API Required - Platform Ready)                #
+###############################################################{Colors.ENDC}
 """
 
-def clear(): os.system('cls' if os.name=='nt' else 'clear')
+# مخزن الأسئلة والحلول
+QUESTIONS = []
 
-# =========================
-# LAB: جلب الأسئلة
-# =========================
-def fetch_questions(url):
-    qs=[]
+def run_cmd(cmd):
+    """تنفيذ أوامر النظام وعرض النتائج"""
+    print(f"{Colors.YELLOW}[*] جاري تنفيذ: {cmd}{Colors.ENDC}")
     try:
-        r=requests.get(url,timeout=10)
-        s=BeautifulSoup(r.text,"html.parser")
-        for t in s.find_all(["h1","h2","h3","p","li"]):
-            txt=t.get_text().strip()
-            if "?" in txt or "question" in txt.lower():
-                qs.append(txt)
-    except:
-        pass
-    return qs
+        subprocess.run(cmd, shell=True)
+    except Exception as e:
+        print(f"{Colors.RED}[!] خطأ في التنفيذ: {e}{Colors.ENDC}")
 
-# =========================
-# AI خفيف: فهم النية
-# =========================
-def detect_intent(q):
-    q=q.lower()
-    if "flag" in q: return "FLAG"
-    if "port" in q or "service" in q: return "SERVICE"
-    if "ftp" in q and ("find" in q or "discover" in q): return "FTP_CONTENT"
-    if "how" in q and "access" in q: return "ACCESS_METHOD"
-    if "hidden" in q or "directory" in q or "entry" in q: return "HIDDEN_PATH"
-    return "GENERIC"
+def match_answer(data, category):
+    """مطابقة البيانات مع أسئلة المنصة (THM, HTB, etc.)"""
+    print(f"\n{Colors.HEADER}[🔍] جاري فحص المطابقة لـ ({category})...{Colors.ENDC}")
+    found = False
+    for i, q in enumerate(QUESTIONS):
+        # منطق مطابقة بسيط بناءً على الكلمات المفتاحية
+        if category.lower() in q.lower() or "answer" in q.lower() or "what" in q.lower():
+            print(f"{Colors.GREEN}{Colors.BOLD}[🎯] احتمال حل للسؤال {i+1}:{Colors.ENDC}")
+            print(f"{Colors.CYAN}السؤال: {q}{Colors.ENDC}")
+            print(f"{Colors.GREEN}الحل المقترح: {data}{Colors.ENDC}")
+            print("-" * 40)
+            found = True
+    if not found:
+        print(f"{Colors.YELLOW}[i] تم استخراج ({data}) ولكن لم أجد سؤالاً مطابقاً له بعد.{Colors.ENDC}")
 
-def match_by_intent(intent, out):
-    if intent=="SERVICE":
-        for l in out.splitlines():
-            if "/tcp" in l and "open" in l: return l.strip()
-    if intent=="FTP_CONTENT":
-        for l in out.splitlines():
-            if any(x in l.lower() for x in [".txt",".bak",".zip"]): return l.strip()
-    if intent=="ACCESS_METHOD":
-        if "anonymous" in out.lower(): return "Anonymous FTP Login"
-    if intent=="FLAG":
-        m=re.search(r"(flag\{.*?\}|CTF\{.*?\})", out, re.I)
-        return m.group(1) if m else None
-    return None
+def analyze_engine(raw_text, target_ip):
+    """المحرك الرئيسي لتحليل المخرجات"""
+    
+    # 1. كشف وكسر الهاشات تلقائياً (Hash Cracking)
+    hash_list = {
+        "MD5": r"\b[a-fA-F0-9]{32}\b",
+        "SHA1": r"\b[a-fA-F0-9]{40}\b",
+        "SHA256": r"\b[a-fA-F0-9]{64}\b"
+    }
+    
+    for h_name, pattern in hash_list.items():
+        match = re.search(pattern, raw_text)
+        if match:
+            h_val = match.group(0)
+            print(f"\n{Colors.RED}[!] اكتشاف هاش {h_name}: {h_val}{Colors.ENDC}")
+            match_answer(h_val, "Hash")
+            
+            if input(f"{Colors.YELLOW}[?] هل تريد كسر الهاش بـ John؟ (y/n): {Colors.ENDC}").lower() == 'y':
+                with open("crack_me.txt", "w") as f: f.write(h_val)
+                fmt = "--format=Raw-MD5" if h_name == "MD5" else ""
+                run_cmd(f"john {fmt} --wordlist=/usr/share/wordlists/rockyou.txt crack_me.txt")
+                res = subprocess.getoutput("john --show crack_me.txt")
+                if ":" in res:
+                    plain = res.split(":")[1].split()[0]
+                    print(f"{Colors.GREEN}[+] تم الكسر! الباسورد هو: {plain}{Colors.ENDC}")
+                    match_answer(plain, "Password")
+            return
 
-# =========================
-# Modules Framework
-# =========================
-class Module:
-    name=""; desc=""
-    def run(self, target, mem): return ""
+    # 2. تحليل المنافذ والخدمات (Nmap Analysis)
+    ports = re.findall(r"(\d+)/tcp\s+open\s+([\w-]+)", raw_text)
+    if ports:
+        for p_num, s_name in ports:
+            print(f"{Colors.CYAN}[+] منفذ مكتشف: {p_num} ({s_name}){Colors.ENDC}")
+            match_answer(p_num, "Port")
+            match_answer(s_name, "Service")
+        
+        # اقتراح هجوم تلقائي
+        if "80" in [p[0] for p in ports]:
+            if input(f"{Colors.YELLOW}[?] هل أشغل Gobuster للبحث عن مسارات مخفية؟ (y/n): {Colors.ENDC}").lower() == 'y':
+                run_cmd(f"gobuster dir -u http://{target_ip} -w /usr/share/wordlists/dirb/common.txt -q")
 
-class Nmap(Module):
-    name="scanner/nmap"; desc="Service discovery"
-    def run(self, target, mem):
-        print("[*] Running Nmap (safe scan)…")
-        try:
-            p=subprocess.run(["nmap","-sV","-Pn",target],capture_output=True,text=True)
-            mem["nmap"]=p.stdout
-            return p.stdout
-        except Exception as e:
-            return str(e)
+    # 3. كشف الـ Flags (THM{...}, HTB{...}, etc.)
+    flags = re.findall(r"([a-zA-Z0-9]+{[^}]+})", raw_text)
+    if flags:
+        for f in flags:
+            print(f"{Colors.GREEN}[🚩] مبروك! تم العثور على Flag: {f}{Colors.ENDC}")
+            match_answer(f, "Flag")
 
-class FTPEnum(Module):
-    name="enum/ftp"; desc="Check anonymous FTP (safe)"
-    def run(self, target, mem):
-        print("[*] Checking FTP anonymous (safe)…")
-        # محاكاة/قراءة فقط
-        out="Anonymous login allowed\npub/\nreadme.txt"
-        mem["ftp"]=out
-        return out
-
-class HTTPEnum(Module):
-    name="enum/http"; desc="Dir discovery (safe placeholder)"
-    def run(self, target, mem):
-        out="Found: /admin\nFound: /backup"
-        mem["http"]=out
-        return out
-
-# =========================
-# Engine: ربط النتائج بالأسئلة
-# =========================
-def check_questions(qs, answered, out):
-    for i,q in enumerate(qs,1):
-        if i in answered: continue
-        intent=detect_intent(q)
-        ans=match_by_intent(intent,out)
-        if ans:
-            answered[i]=ans
-            print(f"\n{C.G}✅ جواب السؤال {i}:{C.E}\n📝 {q}\n🎯 {ans}\n")
-
-# =========================
-# Console (Metasploit-like)
-# =========================
-MODULES={
-    "scanner/nmap": Nmap(),
-    "enum/ftp": FTPEnum(),
-    "enum/http": HTTPEnum(),
-}
-
-def console(target, qs):
-    mem={}; answered={}
-    current=None
-    print(BANNER)
-    print(f"Target: {target}\nQuestions loaded: {len(qs)}\n")
-
-    while True:
-        p="GHENA-AUTO"
-        if current: p+=f"({current.name})"
-        cmd=input(f"{p}> ").strip()
-
-        if cmd in ["exit","quit"]: break
-        if cmd=="help":
-            print("use <module> | run | modules | sessions | auto | exit")
-        elif cmd=="modules":
-            for k,v in MODULES.items(): print(f"{k:15} - {v.desc}")
-        elif cmd.startswith("use "):
-            m=cmd.split(" ",1)[1]
-            current=MODULES.get(m)
-            if not current: print("Module not found")
-        elif cmd=="run" and current:
-            out=current.run(target,mem)
-            print(out)
-            check_questions(qs,answered,out)
-        elif cmd=="sessions":
-            print(mem.keys())
-        elif cmd=="auto":
-            # تسلسل آمن: nmap → حسب النتائج
-            out=MODULES["scanner/nmap"].run(target,mem); print(out)
-            check_questions(qs,answered,out)
-            if "21/tcp" in out:
-                out=MODULES["enum/ftp"].run(target,mem); print(out)
-                check_questions(qs,answered,out)
-            if "80/tcp" in out or "http" in out.lower():
-                out=MODULES["enum/http"].run(target,mem); print(out)
-                check_questions(qs,answered,out)
-        else:
-            print("Unknown command. type help")
-
-# =========================
-# Main
-# =========================
 def main():
-    clear()
-    target=input("Target IP: ").strip()
-    lab=input("Lab URL: ").strip()
-    qs=fetch_questions(lab)
-    console(target, qs)
+    os.system('clear')
+    print(BANNER)
 
-if __name__=="__main__":
-    main()
+    # المرحلة 1: إدخال الأسئلة
+    print(f"{Colors.BOLD}أولاً: أدخل أسئلة اللاب (سؤال لكل سطر، اضغط Enter مرتين للبدء):{Colors.ENDC}")
+    while True:
+        q_input = input(f"{Colors.CYAN}سؤال {len(QUESTIONS)+1}: {Colors.ENDC}")
+        if q_input == "": break
+        QUESTIONS.append(q_input)
+
+    target_ip = input(f"\n{Colors.BOLD}ثانياً: أدخل IP الهدف: {Colors.ENDC}")
+    print(f"\n{Colors.GREEN}[+] النظام جاهز. غنى تراقب مخرجاتك الآن...{Colors.ENDC}")
+
+    # المرحلة 2: المراقبة والتحليل
+    while True:
+        print(f"\n{Colors.YELLOW}{'='*60}{Colors.ENDC}")
+        print(f"{Colors.BOLD}الصق مخرجات الأدوات (Nmap, Gobuster, إلخ) هنا:{Colors.ENDC}")
+        
+        buffer = []
+        while True:
+            try:
+                line = input()
+                if line.lower() == 'exit': sys.exit()
+                if line == '': break
+                buffer.append(line)
+            except EOFError: break
+        
+        data = "\n".join(buffer)
+        if data.strip():
+            analyze_engine(data, target_ip)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{Colors.RED}[!] إيقاف النظام.{Colors.ENDC}")
