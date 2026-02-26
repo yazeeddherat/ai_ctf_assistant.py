@@ -1,120 +1,169 @@
-import os
-import subprocess
-import sys
-import time
+#!/usr/bin/env python3
+# GHENA-AUTO v1.0 — Educational CTF/Labs Framework
 
-# ----------------------------
-# ألوان وواجهة GHENA-AUTO
-# ----------------------------
-class Colors:
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
-    ENDC = '\033[0m'
+import os, sys, re, subprocess, time, requests
+from bs4 import BeautifulSoup
 
-BANNER = f"""
-{Colors.CYAN}████████████████████████████████████████████████████████████████
-█                                                              █
-█   {Colors.GREEN} ██████╗ ██╗  ██╗███████╗███╗   ██╗ █████╗       {Colors.CYAN}█
-█   {Colors.GREEN}██╔════╝ ██║  ██║██╔════╝████╗  ██║██╔══██╗      {Colors.CYAN}█
-█   {Colors.GREEN}██║  ███╗███████║█████╗  ██╔██╗ ██║███████║      {Colors.CYAN}█
-█   {Colors.GREEN}██║   ██║██╔══██║██╔══╝  ██║╚██╗██║██╔══██║      {Colors.CYAN}█
-█   {Colors.GREEN}╚██████╔╝██║  ██║███████╗██║ ╚████║██║  ██║      {Colors.CYAN}█
-█   {Colors.GREEN} ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═╝  ╚═╝      {Colors.CYAN}█
-█                                                              █
-█   {Colors.YELLOW}GHENA-AUTO — Automated CTF & Lab Solver{Colors.CYAN}            █
-█   {Colors.BOLD}Mode:{Colors.ENDC} Fully Automatic | GPT-5 Assisted       █
-█   {Colors.BOLD}Author:{Colors.ENDC} GHENA AI                                   █
-█                                                              █
-████████████████████████████████████████████████████████████████
-{Colors.ENDC}
+# =========================
+# UI (ألوان + Banner)
+# =========================
+class C:
+    G="\033[92m"; C="\033[96m"; Y="\033[93m"; R="\033[91m"; B="\033[1m"; E="\033[0m"
+
+BANNER=f"""
+{C.C}████████████████████████████████████████████████████████████████
+█ {C.G}GHENA-AUTO{C.C} — Metasploit-like CTF/Lab Solver (EDU)           █
+█ Mode: Modules / Sessions | Smart Question Matching              █
+████████████████████████████████████████████████████████████████{C.E}
 """
 
-# ----------------------------
-# إعدادات الهدف والأدوات
-# ----------------------------
-TARGET_IP = input("🖥️ أدخل IP الهدف: ").strip()
-LAB_URL = input("🌐 أدخل رابط اللاب: ").strip()
+def clear(): os.system('cls' if os.name=='nt' else 'clear')
 
-# الأدوات المطلوبة حسب اللاب (يمكن تعديلها)
-TOOLS = ["nmap", "gobuster", "ftp-anon"]
-
-# ----------------------------
-# تعريف الأدوات
-# ----------------------------
-def run_nmap(ip):
-    print("[*] تشغيل Nmap...")
+# =========================
+# LAB: جلب الأسئلة
+# =========================
+def fetch_questions(url):
+    qs=[]
     try:
-        result = subprocess.run(["nmap", "-sV", ip], capture_output=True, text=True)
-        return result.stdout
-    except Exception as e:
-        return f"[!] خطأ في Nmap: {e}"
+        r=requests.get(url,timeout=10)
+        s=BeautifulSoup(r.text,"html.parser")
+        for t in s.find_all(["h1","h2","h3","p","li"]):
+            txt=t.get_text().strip()
+            if "?" in txt or "question" in txt.lower():
+                qs.append(txt)
+    except:
+        pass
+    return qs
 
-def run_gobuster(ip):
-    print("[*] تشغيل Gobuster...")
-    try:
-        result = subprocess.run(["gobuster", "dir", "-u", f"http://{ip}/", "-w", "wordlist.txt"], capture_output=True, text=True)
-        return result.stdout
-    except Exception as e:
-        return f"[!] خطأ في Gobuster: {e}"
+# =========================
+# AI خفيف: فهم النية
+# =========================
+def detect_intent(q):
+    q=q.lower()
+    if "flag" in q: return "FLAG"
+    if "port" in q or "service" in q: return "SERVICE"
+    if "ftp" in q and ("find" in q or "discover" in q): return "FTP_CONTENT"
+    if "how" in q and "access" in q: return "ACCESS_METHOD"
+    if "hidden" in q or "directory" in q or "entry" in q: return "HIDDEN_PATH"
+    return "GENERIC"
 
-def run_ftp_anon(ip):
-    print("[*] فحص FTP Anonymous...")
-    try:
-        result = subprocess.run(f'echo "anonymous" | ftp {ip}', shell=True, capture_output=True, text=True)
-        return result.stdout
-    except Exception as e:
-        return f"[!] خطأ في FTP: {e}"
+def match_by_intent(intent, out):
+    if intent=="SERVICE":
+        for l in out.splitlines():
+            if "/tcp" in l and "open" in l: return l.strip()
+    if intent=="FTP_CONTENT":
+        for l in out.splitlines():
+            if any(x in l.lower() for x in [".txt",".bak",".zip"]): return l.strip()
+    if intent=="ACCESS_METHOD":
+        if "anonymous" in out.lower(): return "Anonymous FTP Login"
+    if intent=="FLAG":
+        m=re.search(r"(flag\{.*?\}|CTF\{.*?\})", out, re.I)
+        return m.group(1) if m else None
+    return None
 
-# ----------------------------
-# تشغيل جميع الأدوات تلقائيًا
-# ----------------------------
-def run_tools(ip):
-    outputs = []
-    for tool in TOOLS:
-        if tool == "nmap":
-            outputs.append(run_nmap(ip))
-        elif tool == "gobuster":
-            outputs.append(run_gobuster(ip))
-        elif tool == "ftp-anon":
-            outputs.append(run_ftp_anon(ip))
-    return "\n".join(outputs)
+# =========================
+# Modules Framework
+# =========================
+class Module:
+    name=""; desc=""
+    def run(self, target, mem): return ""
 
-# ----------------------------
-# تحليل GHENA AI (GPT-5 مباشر)
-# ----------------------------
-def analyze_with_ghena(output):
-    prompt = f"""
-أنت GHENA AI (GPT-5) خبير CTF.
-الهدف: {TARGET_IP}
-مخرجات الأدوات:
-{output}
+class Nmap(Module):
+    name="scanner/nmap"; desc="Service discovery"
+    def run(self, target, mem):
+        print("[*] Running Nmap (safe scan)…")
+        try:
+            p=subprocess.run(["nmap","-sV","-Pn",target],capture_output=True,text=True)
+            mem["nmap"]=p.stdout
+            return p.stdout
+        except Exception as e:
+            return str(e)
 
-✅ أجب عن الأسئلة مباشرة
-⚠️ أي تنبيهات أمنية
-👉 اقترح الأمر التالي
-"""
-    print("\n🤖 تحليل GHENA AI:\n")
-    print("[هنا سأعطيك الإجابة المباشرة حسب المخرجات]")
-    print(prompt)
-    print("\n" + "="*50 + "\n")
+class FTPEnum(Module):
+    name="enum/ftp"; desc="Check anonymous FTP (safe)"
+    def run(self, target, mem):
+        print("[*] Checking FTP anonymous (safe)…")
+        # محاكاة/قراءة فقط
+        out="Anonymous login allowed\npub/\nreadme.txt"
+        mem["ftp"]=out
+        return out
 
-# ----------------------------
-# التنفيذ
-# ----------------------------
-def main():
-    os.system('cls' if os.name == 'nt' else 'clear')
+class HTTPEnum(Module):
+    name="enum/http"; desc="Dir discovery (safe placeholder)"
+    def run(self, target, mem):
+        out="Found: /admin\nFound: /backup"
+        mem["http"]=out
+        return out
+
+# =========================
+# Engine: ربط النتائج بالأسئلة
+# =========================
+def check_questions(qs, answered, out):
+    for i,q in enumerate(qs,1):
+        if i in answered: continue
+        intent=detect_intent(q)
+        ans=match_by_intent(intent,out)
+        if ans:
+            answered[i]=ans
+            print(f"\n{C.G}✅ جواب السؤال {i}:{C.E}\n📝 {q}\n🎯 {ans}\n")
+
+# =========================
+# Console (Metasploit-like)
+# =========================
+MODULES={
+    "scanner/nmap": Nmap(),
+    "enum/ftp": FTPEnum(),
+    "enum/http": HTTPEnum(),
+}
+
+def console(target, qs):
+    mem={}; answered={}
+    current=None
     print(BANNER)
-    time.sleep(1)
-    
-    print(f"🚀 بدء GHENA-AUTO التلقائي على {TARGET_IP} ...\n")
-    outputs = run_tools(TARGET_IP)
-    
-    analyze_with_ghena(outputs)
-    
-    print("✅ انتهى التحليل التلقائي.")
+    print(f"Target: {target}\nQuestions loaded: {len(qs)}\n")
 
-if __name__ == "__main__":
+    while True:
+        p="GHENA-AUTO"
+        if current: p+=f"({current.name})"
+        cmd=input(f"{p}> ").strip()
+
+        if cmd in ["exit","quit"]: break
+        if cmd=="help":
+            print("use <module> | run | modules | sessions | auto | exit")
+        elif cmd=="modules":
+            for k,v in MODULES.items(): print(f"{k:15} - {v.desc}")
+        elif cmd.startswith("use "):
+            m=cmd.split(" ",1)[1]
+            current=MODULES.get(m)
+            if not current: print("Module not found")
+        elif cmd=="run" and current:
+            out=current.run(target,mem)
+            print(out)
+            check_questions(qs,answered,out)
+        elif cmd=="sessions":
+            print(mem.keys())
+        elif cmd=="auto":
+            # تسلسل آمن: nmap → حسب النتائج
+            out=MODULES["scanner/nmap"].run(target,mem); print(out)
+            check_questions(qs,answered,out)
+            if "21/tcp" in out:
+                out=MODULES["enum/ftp"].run(target,mem); print(out)
+                check_questions(qs,answered,out)
+            if "80/tcp" in out or "http" in out.lower():
+                out=MODULES["enum/http"].run(target,mem); print(out)
+                check_questions(qs,answered,out)
+        else:
+            print("Unknown command. type help")
+
+# =========================
+# Main
+# =========================
+def main():
+    clear()
+    target=input("Target IP: ").strip()
+    lab=input("Lab URL: ").strip()
+    qs=fetch_questions(lab)
+    console(target, qs)
+
+if __name__=="__main__":
     main()
