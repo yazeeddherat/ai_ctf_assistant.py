@@ -5,9 +5,8 @@ import requests
 from bs4 import BeautifulSoup
 
 # --- [ الإعدادات - SETTINGS ] ---
-# ضع مفتاحك الجديد الذي ظهر في الصورة الأخيرة هنا
-API_KEY = "AIzaSyDmm3sH2JC4PJDLJwUP47DQbX3zqCrcNDA"
-COOKIES = {"connect.sid": "ضـع_الـكوكـي_هنـا_اختياري"}
+# ضع مفتاحك الجديد هنا الذي استخرجته من Google AI Studio
+API_KEY = "AIzaSyCf6jw6eM5kqTPwfRnHNZiR1i0dMcH_4gY" 
 
 class Colors:
     CYAN = '\033[96m'
@@ -28,30 +27,39 @@ BANNER = f"""
 #   {Colors.GREEN} ╚██████╔╝██║  ██║███████╗██║ ╚████║██║  ██║ ██║  {Colors.CYAN}       #
 #   {Colors.GREEN}  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═╝  {Colors.CYAN}       #
 #                                                             #
-#            {Colors.YELLOW}--- GHENA AI: THE FULL LAB SCENARIO ---{Colors.CYAN}          #
+#            {Colors.YELLOW}--- GHENA AI: THE FINAL LAB SOLVER ---{Colors.CYAN}           #
 ###############################################################{Colors.ENDC}
 """
 
 def initialize_engine():
-    print(f"{Colors.YELLOW}[*] جاري فحص الاتصال بالمفتاح وتفعيل الموديل...{Colors.ENDC}")
-    try:
-        genai.configure(api_key=API_KEY)
-        # استخدام المسار الكامل للموديل لتجنب خطأ 404 الذي ظهر في الصور
-        model = genai.GenerativeModel('models/gemini-1.5-flash')
-        # اختبار استجابة سريع
-        model.generate_content("ping", generation_config={"max_output_tokens": 1})
-        print(f"{Colors.GREEN}[+] تم التفعيل بنجاح! المحرك جاهز للعمل وفق توقيت Amman.{Colors.ENDC}")
-        return model
-    except Exception as e:
-        print(f"{Colors.FAIL}\n[!] فشل: {e}. تأكد من وضع المفتاح الصحيح وتغيير الموديل لـ flash.{Colors.ENDC}")
-        sys.exit()
+    """تهيئة المحرك وتجربة الاتصال لتجنب خطأ 404"""
+    print(f"{Colors.YELLOW}[*] جاري فحص الاتصال بالمفتاح والموديل...{Colors.ENDC}")
+    genai.configure(api_key=API_KEY)
+    
+    # قائمة الموديلات المتاحة (نبدأ بـ flash لأنه الأكثر استقراراً للمجاني)
+    model_names = ['gemini-1.5-flash', 'models/gemini-1.5-flash']
+    
+    for name in model_names:
+        try:
+            model = genai.GenerativeModel(name)
+            # اختبار استجابة سريع
+            model.generate_content("test", generation_config={"max_output_tokens": 1})
+            print(f"{Colors.GREEN}[+] تم التفعيل بنجاح! الموديل المستخدم: {name}{Colors.ENDC}")
+            return model
+        except Exception:
+            continue
+    
+    print(f"{Colors.FAIL}[!] خطأ: لم ينجح الاتصال. تأكد من تحديث المكتبة عبر الأمر:\n    pip install -U google-generativeai --break-system-packages{Colors.ENDC}")
+    sys.exit()
 
 def fetch_lab_context(url):
+    print(f"{Colors.YELLOW}[*] سحب تعليمات اللاب من الرابط...{Colors.ENDC}")
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, cookies=COOKIES, timeout=10)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
         soup = BeautifulSoup(res.content, 'html.parser')
         return "\n".join([el.get_text() for el in soup.find_all(['h3', 'h4', 'p', 'li', 'code'])])[:6000]
-    except: return "Manual Mode"
+    except:
+        return "Manual Mode: Context fetching failed."
 
 def main():
     os.system('clear' if os.name == 'posix' else 'cls')
@@ -62,33 +70,26 @@ def main():
     lab_url = input(f"\n{Colors.BOLD}[?] رابط اللاب: {Colors.ENDC}")
     target_ip = input(f"{Colors.BOLD}[?] IP الهدف: {Colors.ENDC}")
     
-    print(f"{Colors.YELLOW}[*] جاري قراءة سيناريو اللاب والأسئلة...{Colors.ENDC}")
     lab_context = fetch_lab_context(lab_url)
-
-    print(f"{Colors.GREEN}[+] GHENA ستلتزم الآن بتعليمات اللاب حرفياً.{Colors.ENDC}")
+    print(f"{Colors.GREEN}[+] غنى جاهزة. سألتزم بتعليمات اللاب وأستخرج الباسوردات.{Colors.ENDC}")
 
     while True:
         print(f"\n{Colors.CYAN}{'='*60}{Colors.ENDC}")
         
-        # 1. تحديد الخطوة التالية بناءً على اللاب فقط
-        prompt_instruction = f"""
-        أنت مساعد لابات CTF. تعليمات اللاب: {lab_context}
-        بناءً على هذه التعليمات والهدف {target_ip}، ما هو الأمر التقني الذي يجب تنفيذه الآن؟
-        (ملاحظة: إذا طلب اللاب Nmap استخدمه، إذا طلب Gobuster استخدمه).
-        ابدأ بـ 'NEXT_STEP:'
-        """
+        # 1. تحديد الخطوة التالية بناءً على اللاب
+        prompt_step = f"تعليمات اللاب: {lab_context}\nالهدف: {target_ip}\nبناءً على اللاب، ما هو الأمر التقني المطلوب تنفيذه الآن؟ ابدأ بـ 'NEXT_STEP:'"
         
         try:
-            ai_instruction = active_model.generate_content(prompt_instruction).text
-            print(f"{Colors.HEADER}🤖 تعليمات اللاب الحالية:{Colors.ENDC}\n{ai_instruction}")
-            
-            if "NEXT_STEP:" in ai_instruction:
-                cmd = ai_instruction.split("NEXT_STEP:")[1].split("\n")[0].strip()
-                choice = input(f"\n{Colors.WARNING}[!] تنفيذ {cmd}؟ (y/n): {Colors.ENDC}")
+            ai_step = active_model.generate_content(prompt_step).text
+            if "NEXT_STEP:" in ai_step:
+                cmd = ai_step.split("NEXT_STEP:")[1].split("\n")[0].strip()
+                print(f"{Colors.HEADER}🤖 المهمة القادمة حسب اللاب:{Colors.ENDC}\n{ai_step}")
+                choice = input(f"\n{Colors.WARNING}[!] هل تريد تنفيذ {cmd}؟ (y/n): {Colors.ENDC}")
                 if choice.lower() == 'y': os.system(cmd)
-        except Exception as e: print(f"Error: {e}")
+        except Exception as e:
+            print(f"Error identifying step: {e}")
 
-        # 2. تحليل النتائج واستخراج الباسوردات والحلول
+        # 2. تحليل النتائج وحل الأسئلة
         print(f"\n{Colors.YELLOW}الصق مخرجات الأداة هنا (Enter مرتين):{Colors.ENDC}")
         lines = []
         while True:
@@ -102,24 +103,29 @@ def main():
 
         prompt_solve = f"""
         سياق اللاب: {lab_context}
-        المخرجات التقنية الحالية: {user_output}
+        المخرجات: {user_output}
         
-        مهمتك كـ GHENA AI:
-        1. استخرج أي Password أو Flag أو Username ظهر في المخرجات.
-        2. اربط النتائج بأسئلة اللاب المذكورة في السياق.
-        3. إذا كان هناك FTP يسمح بـ Anonymous، أخبر المستخدم فوراً.
+        مهمتك:
+        1. استخرج الأجوبة لأسئلة اللاب.
+        2. إذا وجدت باسوورد أو يوزر، أبرزه بوضوح.
+        3. إذا اكتشفت FTP Anonymous، نبهني.
         
         التنسيق:
-        ✅ جواب السؤال (رقم X): [الحل]
-        🔑 Credentials: [يوزر:باسورد إن وجد]
-        ⚠️ Alert: [تنبيهات أمنية]
+        ✅ جواب السؤال (رقم): [الإجابة]
+        🔑 Credentials: [يوزر:باسورد]
+        ⚠️ Alert: [أي ثغرة مكتشفة]
         """
         
         try:
-            analysis = active_model.generate_content(prompt_solve).text
-            print(f"\n{Colors.OKGREEN}🎯 تحليل غنى وحل الأسئلة:{Colors.ENDC}\n")
-            print(analysis)
-        except Exception as e: print(f"Analysis Error: {e}")
+            print(f"\n{Colors.OKGREEN}[⚡] جاري استخراج الحلول...{Colors.ENDC}")
+            solution = active_model.generate_content(prompt_solve).text
+            print(f"\n{Colors.HEADER}🎯 تحليل النتائج:{Colors.ENDC}\n")
+            print(solution)
+        except Exception as e:
+            print(f"Analysis Error: {e}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{Colors.FAIL}[!] إغلاق.{Colors.ENDC}")
