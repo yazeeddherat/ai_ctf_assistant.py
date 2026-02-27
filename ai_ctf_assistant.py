@@ -1,120 +1,167 @@
-# ghena_ai_op.py
 from PyQt6.QtWidgets import *
-import subprocess, sys, time, re, os, requests
+from PyQt6.QtCore import QThread, pyqtSignal
+import subprocess, sys, time, os
 
-# ----------------------------
-# Plugins داخل نفس الملف (Drop-in)
-# ----------------------------
-class Plugins:
-    @staticmethod
-    def nmap(target):
-        cmd = f"nmap -sC -sV {target}"
-        return {"tool":"nmap","command":cmd,"reason":"Discover services and ports","confidence":0.95,"sets":{"ports":True,"http":True}}
+# 
 
+# ---------------------------------------------------------
+# محرك الأوامر الشامل لجميع المنصات (TryHackMe, HTB, VulnHub)
+# ---------------------------------------------------------
+class UniversalPlugins:
     @staticmethod
-    def gobuster(target):
-        cmd = f"gobuster dir -u http://{target}/ -w /usr/share/wordlists/dirb/common.txt"
-        return {"tool":"gobuster","command":cmd,"reason":"Discover hidden directories/files","confidence":0.88,"sets":{"directories":True}}
+    def quick_scan(target):
+        # فحص سريع جداً للمنافذ المفتوحة
+        return f"nmap -F --open {target}"
 
     @staticmethod
-    def ssh(user,target):
-        cmd = f"ssh {user}@{target}"
-        return {"tool":"ssh","command":cmd,"reason":"Access user shell after credentials","confidence":0.9,"sets":{"user_shell":True}}
+    def deep_scan(target):
+        # فحص عميق للخدمات، الإصدارات، والسكربتات الافتراضية
+        return f"nmap -sV -sC -A -p- {target}"
 
     @staticmethod
-    def john(hash_file):
-        cmd = f"john --wordlist=/usr/share/wordlists/rockyou.txt {hash_file}"
-        return {"tool":"john","command":cmd,"reason":"Crack hashes using wordlist","confidence":0.9,"sets":{"cracked_password":True}}
+    def web_discovery(target):
+        # فحص المسارات والمجلدات المخفية في مواقع الويب
+        return f"gobuster dir -u http://{target}/ -w /usr/share/wordlists/dirb/common.txt -q -x php,txt,html"
 
     @staticmethod
-    def priv_esc():
-        cmd = "sudo -l; find / -perm -4000 2>/dev/null"
-        return {"tool":"priv_esc","command":cmd,"reason":"Privilege escalation analysis","confidence":0.93,"sets":{"root_shell":True}}
+    def smb_enum(target):
+        # فحص بروتوكول SMB للملفات المشتركة بدون كلمة سر
+        return f"smbclient -L //{target} -N"
 
     @staticmethod
-    def file_ops(file_path):
-        cmd = f"cat {file_path}"
-        return {"tool":"file_ops","command":cmd,"reason":"Read file content (flags/passwords)","confidence":0.99,"sets":{"read_file":True}}
+    def john_crack(hash_file):
+        # كسر الهاشات باستخدام قائمة rockyou الشهيرة
+        return f"john --wordlist=/usr/share/wordlists/rockyou.txt {hash_file}"
 
-# ----------------------------
-# Utils
-# ----------------------------
-def extract_questions_from_lab(url):
-    questions = []
-    try:
-        html = requests.get(url, timeout=10).text.lower()
-        patterns = [r"user flag",r"root flag",r"what is the password",r"find the flag",r"what is the username"]
-        for p in patterns:
-            if re.search(p, html):
-                questions.append(p)
-    except Exception:
-        questions = ["user flag","root flag"]
-    return list(set(questions))
+# ---------------------------------------------------------
+# خيط التنفيذ (لضمان استقرار الواجهة أثناء الفحص)
+# ---------------------------------------------------------
+class CmdWorker(QThread):
+    output_signal = pyqtSignal(str)
+    
+    def __init__(self, cmd):
+        super().__init__()
+        self.cmd = cmd
+        
+    def run(self):
+        # تنفيذ الأمر وجلب المخرجات سطراً بسطر
+        process = subprocess.Popen(
+            self.cmd, shell=True, stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT, text=True
+        )
+        for line in process.stdout:
+            self.output_signal.emit(line.strip())
 
-def suggest_tools(questions):
-    plan = []
-    if "user flag" in questions:
-        plan.append(("nmap","scan ports"))
-        plan.append(("gobuster","find directories"))
-        plan.append(("ssh","user access"))
-    if "root flag" in questions:
-        plan.append(("priv_esc","privilege escalation"))
-    return plan
-
-# ----------------------------
-# GUI + Engine
-# ----------------------------
-class GHENA(QMainWindow):
+# ---------------------------------------------------------
+# الواجهة الرسومية الرئيسية
+# ---------------------------------------------------------
+class GHENA_ULTIMATE(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("GHENA AI – OP Edition (Single File)")
-        self.resize(1000,700)
-        layout = QVBoxLayout()
+        self.setWindowTitle("GHENA AI – Universal Lab Solver v20.0")
+        self.setMinimumSize(1000, 750)
+        self.init_ui()
 
-        self.lab_url = QLineEdit(); self.lab_url.setPlaceholderText("Lab URL"); layout.addWidget(self.lab_url)
-        self.mode = QComboBox(); self.mode.addItems(["Manual","Auto"]); layout.addWidget(self.mode)
-        self.start = QPushButton("Analyze Lab"); layout.addWidget(self.start)
-        self.output = QTextEdit(); self.output.setReadOnly(True); layout.addWidget(self.output)
-        container = QWidget(); container.setLayout(layout); self.setCentralWidget(container)
-        self.start.clicked.connect(self.run)
+    def init_ui(self):
+        main_layout = QVBoxLayout()
 
-    def run_command(self,cmd):
-        self.output.append(f"[EXEC] {cmd}")
-        process=subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-        for line in process.stdout:
-            self.output.append(line.strip())
+        # --- قسم إدخال البيانات ---
+        input_group = QGroupBox("Target Information")
+        input_layout = QGridLayout()
+        
+        self.target_ip = QLineEdit(); self.target_ip.setPlaceholderText("أدخل IP الهدف هنا (مثلاً: 10.10.x.x)")
+        input_layout.addWidget(QLabel("Target IP:"), 0, 0)
+        input_layout.addWidget(self.target_ip, 0, 1)
 
-    def run(self):
-        url = self.lab_url.text()
-        mode = self.mode.currentText().lower()
-        self.output.append(f"🔍 Analyzing lab: {url}")
-        questions = extract_questions_from_lab(url)
-        self.output.append("📋 Detected Questions:")
-        for q in questions: self.output.append(f" - {q}")
+        self.lab_type = QComboBox()
+        self.lab_type.addItems(["Linux Machine", "Windows Machine", "Web Application"])
+        input_layout.addWidget(QLabel("Machine Type:"), 1, 0)
+        input_layout.addWidget(self.lab_type, 1, 1)
 
-        plan = suggest_tools(questions)
-        for tool_name, reason in plan:
-            if tool_name=="ssh": cmd=Plugins.ssh("user","<IP>")["command"]
-            elif tool_name=="file_ops": cmd=Plugins.file_ops("/tmp/password.txt")["command"]
-            elif tool_name=="priv_esc": cmd=Plugins.priv_esc()["command"]
-            elif tool_name=="nmap": cmd=Plugins.nmap("<IP>")["command"]
-            elif tool_name=="gobuster": cmd=Plugins.gobuster("<IP>")["command"]
-            else: cmd=f"echo unknown {tool_name}"
+        input_group.setLayout(input_layout)
+        main_layout.addWidget(input_group)
 
-            self.output.append(f"\n🤖 Suggestion: {tool_name}\nReason: {reason}\nCommand: {cmd}")
+        # --- قسم أزرار التحكم ---
+        btn_layout = QHBoxLayout()
+        
+        self.qscan_btn = QPushButton("🔍 Quick Scan")
+        self.qscan_btn.clicked.connect(self.run_quick_scan)
+        
+        self.full_btn = QPushButton("🔥 Full Exploit Path")
+        self.full_btn.setStyleSheet("background-color: #c0392b; color: white; font-weight: bold;")
+        self.full_btn.clicked.connect(self.run_full_attack)
+        
+        self.clear_btn = QPushButton("🗑 Clear Console")
+        self.clear_btn.clicked.connect(lambda: self.console.clear())
 
-            if mode=="manual":
-                reply=QMessageBox.question(self,"Execute?",f"Execute {tool_name}?",QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No)
-                if reply!=QMessageBox.StandardButton.Yes: continue
-            else: time.sleep(2)
+        btn_layout.addWidget(self.qscan_btn)
+        btn_layout.addWidget(self.full_btn)
+        btn_layout.addWidget(self.clear_btn)
+        main_layout.addLayout(btn_layout)
 
-            self.run_command(cmd)
+        # --- قسم مخرجات التيرمينال ---
+        self.console = QTextEdit()
+        self.console.setReadOnly(True)
+        self.console.setStyleSheet("""
+            background-color: #000000; 
+            color: #00FF00; 
+            font-family: 'Courier New'; 
+            font-size: 13px;
+            border: 2px solid #333;
+        """)
+        main_layout.addWidget(QLabel("<b>Execution Console:</b>"))
+        main_layout.addWidget(self.console)
 
-# ----------------------------
-# Run
-# ----------------------------
-if __name__=="__main__":
-    app=QApplication(sys.argv)
-    w=GHENA()
-    w.show()
+        container = QWidget()
+        container.setLayout(main_layout)
+        self.setCentralWidget(container)
+
+    # --- وظائف التنفيذ ---
+    def log(self, text):
+        self.console.append(f"<b>[*] {text}</b>")
+
+    def execute_command(self, cmd):
+        self.worker = CmdWorker(cmd)
+        self.worker.output_signal.connect(self.console.append)
+        self.worker.start()
+        # انتظار انتهاء العملية مع إبقاء الواجهة حية
+        while self.worker.isRunning():
+            QApplication.processEvents()
+            time.sleep(0.05)
+
+    def run_quick_scan(self):
+        ip = self.target_ip.text().strip()
+        if not ip: return
+        self.log(f"Starting Quick Scan on {ip}...")
+        self.execute_command(UniversalPlugins.quick_scan(ip))
+
+    def run_full_attack(self):
+        ip = self.target_ip.text().strip()
+        if not ip:
+            QMessageBox.critical(self, "Error", "يجب إدخال IP الهدف أولاً!")
+            return
+        
+        confirm = QMessageBox.question(self, "تأكيد", "هل تريد بدء هجوم شامل؟ قد يستغرق هذا وقتاً طويلاً.")
+        if confirm != QMessageBox.StandardButton.Yes: return
+
+        self.log("--- STARTING FULL EXPLOITATION PATH ---")
+        
+        # المرحلة 1: الفحص العميق
+        self.log("Phase 1: Deep Port Scanning...")
+        self.execute_command(UniversalPlugins.deep_scan(ip))
+        
+        # المرحلة 2: فحص الويب (بشكل تلقائي)
+        self.log("Phase 2: Web Directories Discovery...")
+        self.execute_command(UniversalPlugins.web_discovery(ip))
+        
+        # المرحلة 3: فحص الـ SMB (مفيد جداً في لابات الويندوز)
+        self.log("Phase 3: Enumerating SMB Shares...")
+        self.execute_command(UniversalPlugins.smb_enum(ip))
+        
+        self.log("--- FULL PATH COMPLETED ---")
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = GHENA_ULTIMATE()
+    window.show()
     sys.exit(app.exec())
