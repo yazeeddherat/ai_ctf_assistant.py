@@ -1,146 +1,195 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import QThread, pyqtSignal
-import subprocess, sys, time, os
+import subprocess, sys
 
-# ---------------------------------------------------------
-# محرك الأوامر الشامل (Plugins)
-# ---------------------------------------------------------
-class UniversalPlugins:
+# ============================
+# Plugins / Tools Engine
+# ============================
+class AllInOnePlugins:
     @staticmethod
-    def quick_scan(target):
-        return f"nmap -F --open {target}"
-
-    @staticmethod
-    def deep_scan(target):
-        # تم إضافة -Pn لتجنب الحظر وفحص كل المنافذ
-        return f"nmap -sV -sC -Pn -p- {target}"
+    def nmap_deep(target):
+        return f"nmap -sV -sC -Pn {target}"
 
     @staticmethod
-    def web_discovery(target):
-        return f"gobuster dir -u http://{target}/ -w /usr/share/wordlists/dirb/common.txt -q -x php,txt,html"
+    def gobuster(target):
+        return (
+            f"gobuster dir -u http://{target}/ "
+            f"-w /usr/share/wordlists/dirb/common.txt "
+            f"-q -x php,txt,html"
+        )
 
     @staticmethod
-    def smb_enum(target):
+    def smb_check(target):
         return f"smbclient -L //{target} -N"
 
-# ---------------------------------------------------------
-# خيط التنفيذ (الذي يضمن تسلسل الأوامر)
-# ---------------------------------------------------------
+    @staticmethod
+    def priv_esc_check():
+        return "sudo -l || find / -perm -4000 2>/dev/null"
+
+
+# ============================
+# Lab / Goal Inference Engine
+# ============================
+class LabInferenceEngine:
+    @staticmethod
+    def infer(target):
+        """
+        استنتاج أهداف اللاب بدون قراءة أسئلة مباشرة
+        (Boot2Root pattern)
+        """
+        goals = [
+            "Service Enumeration",
+            "Initial Access",
+            "User Flag",
+            "Privilege Escalation",
+            "Root Flag"
+        ]
+
+        execution_plan = [
+            ("Port Discovery (Nmap)", AllInOnePlugins.nmap_deep(target)),
+            ("Web Enumeration (Gobuster)", AllInOnePlugins.gobuster(target)),
+            ("SMB Enumeration", AllInOnePlugins.smb_check(target)),
+            ("Privilege Escalation Check", AllInOnePlugins.priv_esc_check()),
+        ]
+
+        return goals, execution_plan
+
+
+# ============================
+# Command Worker Thread
+# ============================
 class CmdWorker(QThread):
     output_signal = pyqtSignal(str)
     finished_signal = pyqtSignal()
-    
+
     def __init__(self, cmd):
         super().__init__()
         self.cmd = cmd
-        
+
     def run(self):
         process = subprocess.Popen(
-            self.cmd, shell=True, stdout=subprocess.PIPE, 
-            stderr=subprocess.STDOUT, text=True
+            self.cmd,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
         )
         for line in process.stdout:
-            self.output_signal.emit(line.strip())
+            self.output_signal.emit(line.rstrip())
         process.wait()
         self.finished_signal.emit()
 
-# ---------------------------------------------------------
-# الواجهة الرسومية المحسنة
-# ---------------------------------------------------------
-class GHENA_CHAIN(QMainWindow):
+
+# ============================
+# GUI Application
+# ============================
+class GHENA_OCTOPUS(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("GHENA AI – Sequential Engine v21.0")
-        self.setMinimumSize(1000, 750)
+        self.setWindowTitle("GHENA AI – OCTOPUS Framework v1.0")
+        self.setMinimumSize(1000, 800)
+        self.queue = []
         self.init_ui()
 
     def init_ui(self):
-        main_layout = QVBoxLayout()
+        layout = QVBoxLayout()
 
-        # قسم إدخال الـ IP
-        input_group = QGroupBox("Target Configuration")
-        input_layout = QHBoxLayout()
-        self.target_ip = QLineEdit(); self.target_ip.setPlaceholderText("أدخل IP الهدف هنا...")
-        input_layout.addWidget(QLabel("Target IP:"))
-        input_layout.addWidget(self.target_ip)
-        input_group.setLayout(input_layout)
-        main_layout.addWidget(input_group)
+        self.target_ip = QLineEdit()
+        self.target_ip.setPlaceholderText("Enter Target IP (e.g. 10.10.10.10)")
+        self.target_ip.setStyleSheet(
+            "padding:12px;font-size:15px;border-radius:6px;"
+        )
 
-        # أزرار التحكم
-        btn_layout = QHBoxLayout()
-        self.qscan_btn = QPushButton("🔍 Quick Scan")
-        self.full_btn = QPushButton("🔥 START FULL ATTACK CHAIN")
-        self.full_btn.setStyleSheet("background-color: #c0392b; color: white; font-weight: bold; height: 40px;")
-        
-        btn_layout.addWidget(self.qscan_btn)
-        btn_layout.addWidget(self.full_btn)
-        main_layout.addLayout(btn_layout)
+        layout.addWidget(QLabel("<b>Target IP</b>"))
+        layout.addWidget(self.target_ip)
 
-        # الكونسول
-        self.console = QTextEdit(); self.console.setReadOnly(True)
-        self.console.setStyleSheet("background-color: #000; color: #0f0; font-family: 'Courier New';")
-        main_layout.addWidget(QLabel("<b>Execution Logs:</b>"))
-        main_layout.addWidget(self.console)
+        self.btn = QPushButton("🐙 ANALYZE & EXECUTE")
+        self.btn.setFixedHeight(55)
+        self.btn.setStyleSheet("""
+            background:#e74c3c;
+            color:white;
+            font-size:16px;
+            font-weight:bold;
+            border-radius:10px;
+        """)
+        layout.addWidget(self.btn)
 
-        container = QWidget(); container.setLayout(main_layout); self.setCentralWidget(container)
+        self.console = QTextEdit()
+        self.console.setReadOnly(True)
+        self.console.setStyleSheet("""
+            background:#111;
+            color:#39FF14;
+            font-family:monospace;
+            font-size:13px;
+            padding:10px;
+        """)
+        layout.addWidget(QLabel("<b>Execution Console</b>"))
+        layout.addWidget(self.console)
 
-        # الربط
-        self.qscan_btn.clicked.connect(self.run_quick)
-        self.full_btn.clicked.connect(self.run_chain)
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
 
-    def log(self, text):
-        self.console.append(f"<font color='white'><b>[*] {text}</b></font>")
+        self.btn.clicked.connect(self.start_attack)
 
-    def execute_and_wait(self, name, cmd):
-        """وظيفة لتنفيذ الأمر والانتظار حتى ينتهي تماماً"""
-        self.log(f"Starting Phase: {name}")
-        self.log(f"Command: {cmd}")
-        
-        # إنشاء Worker جديد لكل أمر
-        worker = CmdWorker(cmd)
-        worker.output_signal.connect(self.console.append)
-        
-        # استخدام loop محلي لانتظار انتهاء الخيط (Thread)
-        is_running = True
-        def on_finished(): nonlocal is_running; is_running = False
-        
-        worker.finished_signal.connect(on_finished)
-        worker.start()
+    def log(self, msg, color="#ffffff"):
+        self.console.append(f"<font color='{color}'><b>{msg}</b></font>")
 
-        # الحفاظ على الواجهة مستجيبة أثناء الانتظار
-        while is_running:
-            QApplication.processEvents()
-            time.sleep(0.1)
-        
-        self.log(f"Finished Phase: {name}\n" + "-"*30)
-
-    def run_quick(self):
-        ip = self.target_ip.text().strip()
-        if not ip: return
-        self.execute_and_wait("Quick Scan", UniversalPlugins.quick_scan(ip))
-
-    def run_chain(self):
+    # ============================
+    # Main Logic
+    # ============================
+    def start_attack(self):
         ip = self.target_ip.text().strip()
         if not ip:
-            QMessageBox.warning(self, "Error", "الرجاء إدخال الـ IP")
+            QMessageBox.warning(self, "Error", "Target IP is required.")
             return
 
-        self.log("🚀 INITIATING AUTOMATIC ATTACK CHAIN...")
-        
-        # تمرير الـ IP لكل الأوامر بالتسلسل
-        # 1. فحص عميق
-        self.execute_and_wait("Deep Enumeration", UniversalPlugins.deep_scan(ip))
-        
-        # 2. فحص ويب (تلقائياً بعد الأول)
-        self.execute_and_wait("Web Directory Discovery", UniversalPlugins.web_discovery(ip))
-        
-        # 3. فحص SMB
-        self.execute_and_wait("SMB Share Analysis", UniversalPlugins.smb_enum(ip))
-        
-        self.log("✅ ALL PHASES COMPLETED SUCCESSFULLY!")
+        self.console.clear()
+        self.log("🧠 Analyzing lab objectives...", "#9b59b6")
 
+        goals, plan = LabInferenceEngine.infer(ip)
+
+        for g in goals:
+            self.log(f"🎯 Objective detected: {g}", "#1abc9c")
+
+        self.queue = plan
+        self.log("\n🚀 Execution plan ready.", "#3498db")
+        self.run_next_phase()
+
+    def run_next_phase(self):
+        if not self.queue:
+            self.log("\n✅ All phases completed.", "#2ecc71")
+            return
+
+        name, cmd = self.queue.pop(0)
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm Execution",
+            f"Execute this phase?\n\n{name}\n\n{cmd}",
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.No:
+            self.log(f"⏭ Skipped: {name}", "#e67e22")
+            self.run_next_phase()
+            return
+
+        self.log(f"\n[🚀] Phase: {name}", "#f1c40f")
+        self.log(f"[>] Command: {cmd}", "#95a5a6")
+
+        self.worker = CmdWorker(cmd)
+        self.worker.output_signal.connect(self.console.append)
+        self.worker.finished_signal.connect(self.run_next_phase)
+        self.worker.start()
+
+
+# ============================
+# App Entry
+# ============================
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = GHENA_CHAIN()
+    window = GHENA_OCTOPUS()
     window.show()
     sys.exit(app.exec())
