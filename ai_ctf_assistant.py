@@ -1,195 +1,214 @@
-from PyQt6.QtWidgets import *
+import sys
+import time
+from dataclasses import dataclass
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout,
+    QLabel, QPushButton, QTextEdit, QLineEdit, QMessageBox, QHBoxLayout
+)
 from PyQt6.QtCore import QThread, pyqtSignal
-import subprocess, sys
 
-# ============================
-# Plugins / Tools Engine
-# ============================
-class AllInOnePlugins:
+
+# =========================
+# LAB STATE
+# =========================
+@dataclass
+class LabState:
+    services_known: bool = False
+    web_detected: bool = False
+    creds_found: bool = False
+    user_access: bool = False
+    priv_esc_path: bool = False
+    root_access: bool = False
+
+
+# =========================
+# TOOL REGISTRY (ALL TOOLS)
+# =========================
+class ToolRegistry:
+    """
+    كل أدوات CTF المعروفة — لكن Simulation فقط
+    """
+    NETWORK = [
+        "nmap", "masscan", "rustscan"
+    ]
+
+    WEB = [
+        "gobuster", "ffuf", "dirsearch",
+        "nikto", "whatweb", "wpscan"
+    ]
+
+    CREDS = [
+        "hydra", "medusa", "john", "hashcat"
+    ]
+
+    ENUMERATION = [
+        "linpeas", "linenum", "pspy",
+        "enum4linux", "smbclient"
+    ]
+
+    PRIV_ESC = [
+        "sudo abuse", "SUID abuse",
+        "cron abuse", "capabilities abuse"
+    ]
+
     @staticmethod
-    def nmap_deep(target):
-        return f"nmap -sV -sC -Pn {target}"
-
-    @staticmethod
-    def gobuster(target):
-        return (
-            f"gobuster dir -u http://{target}/ "
-            f"-w /usr/share/wordlists/dirb/common.txt "
-            f"-q -x php,txt,html"
-        )
-
-    @staticmethod
-    def smb_check(target):
-        return f"smbclient -L //{target} -N"
-
-    @staticmethod
-    def priv_esc_check():
-        return "sudo -l || find / -perm -4000 2>/dev/null"
+    def suggest_tools(phase: str):
+        return {
+            "Service Discovery": ToolRegistry.NETWORK,
+            "Web Enumeration": ToolRegistry.WEB,
+            "Credential Attack": ToolRegistry.CREDS,
+            "Privilege Escalation": ToolRegistry.ENUMERATION + ToolRegistry.PRIV_ESC
+        }.get(phase, [])
 
 
-# ============================
-# Lab / Goal Inference Engine
-# ============================
-class LabInferenceEngine:
-    @staticmethod
-    def infer(target):
-        """
-        استنتاج أهداف اللاب بدون قراءة أسئلة مباشرة
-        (Boot2Root pattern)
-        """
-        goals = [
-            "Service Enumeration",
-            "Initial Access",
-            "User Flag",
-            "Privilege Escalation",
-            "Root Flag"
-        ]
+# =========================
+# DECISION ENGINE
+# =========================
+class DecisionEngine:
+    def decide(self, state: LabState):
+        if not state.services_known:
+            return "Service Discovery"
 
-        execution_plan = [
-            ("Port Discovery (Nmap)", AllInOnePlugins.nmap_deep(target)),
-            ("Web Enumeration (Gobuster)", AllInOnePlugins.gobuster(target)),
-            ("SMB Enumeration", AllInOnePlugins.smb_check(target)),
-            ("Privilege Escalation Check", AllInOnePlugins.priv_esc_check()),
-        ]
+        if state.web_detected and not state.creds_found:
+            return "Web Enumeration"
 
-        return goals, execution_plan
+        if state.creds_found and not state.user_access:
+            return "Credential Attack"
+
+        if state.user_access and not state.priv_esc_path:
+            return "Privilege Escalation"
+
+        if state.priv_esc_path and not state.root_access:
+            return "Root Validation"
+
+        return "Completed"
 
 
-# ============================
-# Command Worker Thread
-# ============================
-class CmdWorker(QThread):
-    output_signal = pyqtSignal(str)
-    finished_signal = pyqtSignal()
+# =========================
+# SIMULATION WORKER
+# =========================
+class SimulationWorker(QThread):
+    output = pyqtSignal(str)
+    done = pyqtSignal()
 
-    def __init__(self, cmd):
+    def __init__(self, phase, state: LabState):
         super().__init__()
-        self.cmd = cmd
+        self.phase = phase
+        self.state = state
 
     def run(self):
-        process = subprocess.Popen(
-            self.cmd,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
-        )
-        for line in process.stdout:
-            self.output_signal.emit(line.rstrip())
-        process.wait()
-        self.finished_signal.emit()
+        time.sleep(1.2)
+
+        if self.phase == "Service Discovery":
+            self.output.emit("✔ Services identified (simulated)")
+            self.state.services_known = True
+            self.state.web_detected = True
+
+        elif self.phase == "Web Enumeration":
+            self.output.emit("✔ Information disclosure detected (simulated)")
+            self.state.creds_found = True
+
+        elif self.phase == "Credential Attack":
+            self.output.emit("✔ User access obtained (simulated)")
+            self.output.emit("✔ user.txt located (hidden)")
+            self.state.user_access = True
+
+        elif self.phase == "Privilege Escalation":
+            self.output.emit("✔ Privilege escalation vector found (simulated)")
+            self.state.priv_esc_path = True
+
+        elif self.phase == "Root Validation":
+            self.output.emit("✔ Root access confirmed (simulated)")
+            self.output.emit("✔ root.txt detected (hidden)")
+            self.state.root_access = True
+
+        self.done.emit()
 
 
-# ============================
-# GUI Application
-# ============================
-class GHENA_OCTOPUS(QMainWindow):
+# =========================
+# GUI
+# =========================
+class GHENA_AI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("GHENA AI – OCTOPUS Framework v1.0")
-        self.setMinimumSize(1000, 800)
-        self.queue = []
+        self.setWindowTitle("GHENA AI – All‑Tools CTF Framework (Simulation)")
+        self.setMinimumSize(950, 750)
+
+        self.state = LabState()
+        self.engine = DecisionEngine()
+
         self.init_ui()
+        self.update_view()
 
     def init_ui(self):
         layout = QVBoxLayout()
 
-        self.target_ip = QLineEdit()
-        self.target_ip.setPlaceholderText("Enter Target IP (e.g. 10.10.10.10)")
-        self.target_ip.setStyleSheet(
-            "padding:12px;font-size:15px;border-radius:6px;"
-        )
+        self.ip_input = QLineEdit()
+        self.ip_input.setPlaceholderText("Target IP (CTF Lab)")
+        layout.addWidget(QLabel("<b>Target</b>"))
+        layout.addWidget(self.ip_input)
 
-        layout.addWidget(QLabel("<b>Target IP</b>"))
-        layout.addWidget(self.target_ip)
+        self.phase_box = QTextEdit()
+        self.phase_box.setReadOnly(True)
+        self.phase_box.setStyleSheet("background:#111;color:#00ffcc;")
+        layout.addWidget(QLabel("<b>AI Decision & Tools</b>"))
+        layout.addWidget(self.phase_box)
 
-        self.btn = QPushButton("🐙 ANALYZE & EXECUTE")
-        self.btn.setFixedHeight(55)
-        self.btn.setStyleSheet("""
-            background:#e74c3c;
-            color:white;
-            font-size:16px;
-            font-weight:bold;
-            border-radius:10px;
-        """)
-        layout.addWidget(self.btn)
+        btns = QHBoxLayout()
+        self.approve = QPushButton("✔ Execute (Simulation)")
+        self.stop = QPushButton("⛔ Stop")
+        btns.addWidget(self.approve)
+        btns.addWidget(self.stop)
+        layout.addLayout(btns)
 
         self.console = QTextEdit()
         self.console.setReadOnly(True)
-        self.console.setStyleSheet("""
-            background:#111;
-            color:#39FF14;
-            font-family:monospace;
-            font-size:13px;
-            padding:10px;
-        """)
-        layout.addWidget(QLabel("<b>Execution Console</b>"))
+        self.console.setStyleSheet("background:#000;color:#39ff14;")
+        layout.addWidget(QLabel("<b>Console</b>"))
         layout.addWidget(self.console)
 
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        self.btn.clicked.connect(self.start_attack)
+        self.approve.clicked.connect(self.run_phase)
+        self.stop.clicked.connect(self.close)
 
-    def log(self, msg, color="#ffffff"):
-        self.console.append(f"<font color='{color}'><b>{msg}</b></font>")
+    def update_view(self):
+        phase = self.engine.decide(self.state)
+        tools = ToolRegistry.suggest_tools(phase)
 
-    # ============================
-    # Main Logic
-    # ============================
-    def start_attack(self):
-        ip = self.target_ip.text().strip()
-        if not ip:
-            QMessageBox.warning(self, "Error", "Target IP is required.")
-            return
-
-        self.console.clear()
-        self.log("🧠 Analyzing lab objectives...", "#9b59b6")
-
-        goals, plan = LabInferenceEngine.infer(ip)
-
-        for g in goals:
-            self.log(f"🎯 Objective detected: {g}", "#1abc9c")
-
-        self.queue = plan
-        self.log("\n🚀 Execution plan ready.", "#3498db")
-        self.run_next_phase()
-
-    def run_next_phase(self):
-        if not self.queue:
-            self.log("\n✅ All phases completed.", "#2ecc71")
-            return
-
-        name, cmd = self.queue.pop(0)
-
-        reply = QMessageBox.question(
-            self,
-            "Confirm Execution",
-            f"Execute this phase?\n\n{name}\n\n{cmd}",
-            QMessageBox.StandardButton.Yes |
-            QMessageBox.StandardButton.No
+        self.phase_box.clear()
+        self.phase_box.append(
+            f"🎯 Current Phase: {phase}\n\n"
+            f"🧠 Suggested Tools:\n- " + "\n- ".join(tools)
         )
 
-        if reply == QMessageBox.StandardButton.No:
-            self.log(f"⏭ Skipped: {name}", "#e67e22")
-            self.run_next_phase()
+    def log(self, msg):
+        self.console.append(msg)
+
+    def run_phase(self):
+        if not self.ip_input.text().strip():
+            QMessageBox.warning(self, "Error", "Enter target IP first.")
             return
 
-        self.log(f"\n[🚀] Phase: {name}", "#f1c40f")
-        self.log(f"[>] Command: {cmd}", "#95a5a6")
+        phase = self.engine.decide(self.state)
+        if phase == "Completed":
+            self.log("✅ Lab fully completed (simulation).")
+            return
 
-        self.worker = CmdWorker(cmd)
-        self.worker.output_signal.connect(self.console.append)
-        self.worker.finished_signal.connect(self.run_next_phase)
+        self.log(f"\n[SIM] Running phase: {phase}")
+        self.worker = SimulationWorker(phase, self.state)
+        self.worker.output.connect(self.log)
+        self.worker.done.connect(self.update_view)
         self.worker.start()
 
 
-# ============================
-# App Entry
-# ============================
+# =========================
+# MAIN
+# =========================
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = GHENA_OCTOPUS()
-    window.show()
+    win = GHENA_AI()
+    win.show()
     sys.exit(app.exec())
