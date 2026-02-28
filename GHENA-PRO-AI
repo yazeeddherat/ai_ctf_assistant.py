@@ -1,197 +1,178 @@
-#!/usr/bin/env python3
-# ============================================================
-# GHENA PRO AI – SMART CTF LAB ASSISTANT (SIMULATION)
-# Single File – Educational / Labs Only
-# ============================================================
+import sys, subprocess, os, json
+import google.generativeai as genai
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import QThread, pyqtSignal, QWaitCondition, QMutex, Qt
+from PyQt6.QtGui import QFont, QColor
 
-import sys
-import time
-import textwrap
+# --- إعداد Gemini ---
+# تأكد من وضع مفتاحك هنا
+GEMINI_API_KEY = "YOUR_GEMINI_API_KEY" 
+genai.configure(api_key=GEMINI_API_KEY)
+# استخدام فلاش 1.5 لسرعة الاستجابة في تحليل الـ Logs
+model = genai.GenerativeModel('gemini-1.5-flash')
 
-# ============================================================
-# CONFIG
-# ============================================================
-SIMULATION_MODE = True   # لا تنفيذ حقيقي
-ALLOW_SSH = True         # SSH فقط ببيانات منك
-APP_NAME = "GHENA PRO AI"
+class AutonomousBrain(QThread):
+    log_signal = pyqtSignal(str, str)
+    ask_permission_signal = pyqtSignal(str, str)
+    status_signal = pyqtSignal(str)
 
-# ============================================================
-# UTIL
-# ============================================================
-def slow_print(txt, d=0.01):
-    for c in txt:
-        print(c, end="", flush=True)
-        time.sleep(d)
-    print()
+    def __init__(self, target_ip, goal):
+        super().__init__()
+        self.ip = target_ip
+        self.goal = goal
+        self.mutex = QMutex()
+        self.condition = QWaitCondition()
+        self.approved = False
+        self.history = [] # سجل كامل لتحليل Gemini
 
-def banner():
-    print("=" * 60)
-    print(f"{APP_NAME}".center(60))
-    print("Smart CTF / LAB Reasoning Engine".center(60))
-    print("=" * 60)
-
-# ============================================================
-# AI REASONER (Rule + Logic Based)
-# ============================================================
-class AIReasoner:
-    def analyze(self, stage, output):
-        """
-        يقرر المرحلة التالية والأداة المناسبة
-        """
-        output = output.lower()
-
-        if stage == "start":
-            return {
-                "stage": "recon",
-                "tool": "nmap",
-                "command": "nmap -sC -sV -Pn <IP>",
-                "reason": "Initial service discovery required"
-            }
-
-        if "http" in output or "80/tcp" in output or "web" in output:
-            return {
-                "stage": "enumeration",
-                "tool": "gobuster",
-                "command": "gobuster dir -u http://<IP> -w /usr/share/wordlists/dirb/common.txt",
-                "reason": "Web service detected, directory enumeration needed"
-            }
-
-        if "ssh" in output or "22/tcp" in output:
-            return {
-                "stage": "access",
-                "tool": "ssh",
-                "command": "ssh <user>@<IP>",
-                "reason": "SSH service available, check for valid credentials"
-            }
-
-        if "user shell" in output or "logged in" in output:
-            return {
-                "stage": "privesc",
-                "tool": "sudo",
-                "command": "sudo -l",
-                "reason": "User access achieved, checking sudo privileges"
-            }
-
-        if "nopasswd" in output or "all" in output:
-            return {
-                "stage": "privesc",
-                "tool": "root",
-                "command": "sudo /bin/bash",
-                "reason": "Privilege escalation path identified"
-            }
-
-        return {
-            "stage": stage,
-            "tool": "analysis",
-            "command": "manual analysis",
-            "reason": "No clear automated path, human decision needed"
-        }
-
-# ============================================================
-# SIMULATED OUTPUTS (LAB-LIKE)
-# ============================================================
-def simulated_nmap():
-    return """
-22/tcp open  ssh     OpenSSH 8.2p1
-80/tcp open  http    Apache httpd 2.4.41
-"""
-
-def simulated_gobuster():
-    return """
-/login (Status: 200)
-/uploads (Status: 301)
-"""
-
-def simulated_ssh_login():
-    return """
-Logged in as user: www-data
-User shell obtained
-"""
-
-def simulated_sudo_l():
-    return """
-User www-data may run the following commands:
-(root) NOPASSWD: /usr/bin/python3
-"""
-
-# ============================================================
-# SSH SESSION (SIMULATED)
-# ============================================================
-class SSHSession:
-    def __init__(self, ip, user):
-        self.ip = ip
-        self.user = user
-
-    def run(self, cmd):
-        if "sudo -l" in cmd:
-            return simulated_sudo_l()
-        if "bash" in cmd:
-            return "Root shell would be obtained here (simulation)."
-        return "Command executed (simulation)."
-
-# ============================================================
-# MAIN ENGINE
-# ============================================================
-class GhenaProAI:
-    def __init__(self, ip):
-        self.ip = ip
-        self.stage = "start"
-        self.ai = AIReasoner()
-        self.ssh = None
+    def approve_command(self):
+        self.approved = True
+        self.condition.wakeAll()
 
     def run(self):
-        banner()
-        slow_print(f"[+] Target IP: {self.ip}")
-        print()
+        # الخطوة 1: الفحص الأساسي دائماً البداية
+        current_cmd = f"nmap -sV -T4 {self.ip}"
+        reason = "بدء عملية الاستكشاف (Reconnaissance) لتحديد الخدمات المفتوحة."
 
-        output = ""
-        for step in range(1, 6):
-            decision = self.ai.analyze(self.stage, output)
+        for step in range(1, 15): # زيادة عدد الخطوات المتاحة للهجوم المعقد
+            self.ask_permission_signal.emit(current_cmd, reason)
+            
+            # انتظار موافقة المستخدم
+            self.mutex.lock()
+            self.condition.wait(self.mutex)
+            self.mutex.unlock()
+            
+            if not self.approved: break
 
-            print("-" * 60)
-            print(f"STAGE  : {decision['stage']}")
-            print(f"TOOL   : {decision['tool']}")
-            print(f"COMMAND: {decision['command'].replace('<IP>', self.ip)}")
-            print(f"REASON : {decision['reason']}")
-            print("-" * 60)
+            self.log_signal.emit(f"\n[STEP {step}] Running: {current_cmd}", "#3498db")
+            output = self.execute_cmd(current_cmd)
+            
+            # عرض جزء من النتيجة في الكونسول
+            self.log_signal.emit(f"Output received. Parsing data...", "#95a5a6")
+            
+            # تحديث السجل
+            self.history.append({"step": step, "cmd": current_cmd, "result": output[:2000]})
 
-            cont = input("Execute step? (y/n): ").strip().lower()
-            if cont != "y":
-                slow_print("Stopped by user.")
-                return
+            # استشارة العقل (Gemini)
+            self.status_signal.emit("⚡ Gemini AI is analyzing the chain...")
+            analysis = self.think_with_gemini()
+            
+            current_cmd = analysis.get("COMMAND", "DONE")
+            reason = analysis.get("REASON", "Mission complete or AI stopped.")
 
-            output = self.execute(decision)
-            self.stage = decision["stage"]
+            if "DONE" in current_cmd.upper():
+                self.log_signal.emit("\n🎯 MISSION ACCOMPLISHED: Gemini states no further actions needed.", "#f1c40f")
+                break
+            
+            self.approved = False
 
-            if decision["tool"] == "root":
-                slow_print("\n[✓] End of lab path (root would be reached here).")
-                return
+    def execute_cmd(self, cmd):
+        try:
+            # تنفيذ حقيقي مع دمج الخطأ والمخرج
+            return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, text=True, timeout=300)
+        except subprocess.TimeoutExpired:
+            return "Error: Command timed out after 5 minutes."
+        except Exception as e:
+            return f"Execution Error: {str(e)}"
 
-    def execute(self, decision):
-        tool = decision["tool"]
+    def think_with_gemini(self):
+        # بناء سياق ذكي لـ Gemini
+        history_summary = json.dumps(self.history, indent=2)
+        
+        prompt = f"""
+        TARGET: {self.ip}
+        GOAL: {self.goal}
+        PREVIOUS STEPS:
+        {history_summary}
 
-        if SIMULATION_MODE:
-            if tool == "nmap":
-                return simulated_nmap()
-            if tool == "gobuster":
-                return simulated_gobuster()
-            if tool == "ssh":
-                user = input("Enter SSH username (simulation): ")
-                self.ssh = SSHSession(self.ip, user)
-                return simulated_ssh_login()
-            if tool in ["sudo", "root"]:
-                return self.ssh.run(decision["command"])
+        You are an elite automated penetration testing engine. 
+        Analyze the output of the last command and decide the NEXT logical step.
+        - If you found web ports (80, 443, 8080), suggest directory brute-forcing or vuln scanning.
+        - If you found specific versions (e.g., vsftpd 2.3.4), suggest exploit search.
+        - If you found credentials, suggest login or SSH attempt.
+        - If the goal is reached (root access/flag found), return COMMAND: DONE.
 
-        return "Execution skipped."
+        RESPONSE FORMAT (MANDATORY):
+        REASON: [Short Arabic explanation]
+        COMMAND: [Single Kali Linux command]
+        """
+        try:
+            response = model.generate_content(prompt)
+            raw_text = response.text
+            # استخراج الأوامر بدقة أكبر
+            reason = raw_text.split("REASON:")[1].split("COMMAND:")[0].strip()
+            command = raw_text.split("COMMAND:")[1].strip()
+            return {"REASON": reason, "COMMAND": command}
+        except:
+            return {"REASON": "خطأ في معالجة الرد من الذكاء الاصطناعي", "COMMAND": "DONE"}
 
-# ============================================================
-# ENTRY
-# ============================================================
+# --- واجهة GHENA AI المحدثة ---
+class GhenaAI_V36(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("GHENA AI - Nexus Edition v36.0")
+        self.setMinimumSize(1000, 850)
+        self.setStyleSheet("background-color: #0f0f0f; color: #e0e0e0; font-family: 'Segoe UI';")
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        # Target Control
+        ctrl_layout = QHBoxLayout()
+        self.ip_box = QLineEdit(); self.ip_box.setPlaceholderText("Target IP (e.g. 10.10.231.4)"); self.ip_box.setStyleSheet("padding: 8px; background: #1a1a1a; border: 1px solid #333;")
+        self.goal_box = QComboBox(); self.goal_box.addItems(["Full Root Access", "User Flag", "Network Discovery"])
+        self.goal_box.setStyleSheet("padding: 8px; background: #1a1a1a;")
+        self.btn_run = QPushButton("START ATTACK CHAIN"); self.btn_run.setStyleSheet("background: #8e44ad; font-weight: bold; padding: 10px;")
+        self.btn_run.clicked.connect(self.start_engine)
+        ctrl_layout.addWidget(self.ip_box); ctrl_layout.addWidget(self.goal_box); ctrl_layout.addWidget(self.btn_run)
+        layout.addLayout(ctrl_layout)
+
+        # AI Decision Area
+        self.decision_group = QGroupBox("AI Strategic Decision")
+        self.decision_group.setStyleSheet("color: #00ffcc; border: 1px solid #00ffcc; margin-top: 10px;")
+        dec_layout = QVBoxLayout()
+        self.reason_label = QLabel("Waiting for AI analysis..."); self.reason_label.setWordWrap(True)
+        self.cmd_display = QLineEdit(); self.cmd_display.setReadOnly(True); self.cmd_display.setStyleSheet("color: #ffaa00; font-family: monospace; font-size: 14px; background: #000;")
+        self.btn_approve = QPushButton("APPROVE & EXECUTE"); self.btn_approve.setEnabled(False); self.btn_approve.setStyleSheet("background: #27ae60; color: white; height: 35px;")
+        self.btn_approve.clicked.connect(self.approve)
+        dec_layout.addWidget(self.reason_label); dec_layout.addWidget(self.cmd_display); dec_layout.addWidget(self.btn_approve)
+        self.decision_group.setLayout(dec_layout)
+        layout.addWidget(self.decision_group)
+
+        # Console
+        self.console = QTextEdit(); self.console.setReadOnly(True); self.console.setStyleSheet("background: #000; color: #00ff00; font-family: 'Consolas'; font-size: 11px; border: 1px solid #222;")
+        layout.addWidget(QLabel("Real-time Output Log:"))
+        layout.addWidget(self.console)
+
+        self.status = QStatusBar(); self.setStatusBar(self.status)
+        
+        container = QWidget(); container.setLayout(layout); self.setCentralWidget(container)
+
+    def start_engine(self):
+        ip = self.ip_box.text().strip()
+        if not ip: return
+        self.console.clear()
+        self.btn_run.setEnabled(False)
+        self.brain = AutonomousBrain(ip, self.goal_box.currentText())
+        self.brain.log_signal.connect(self.update_log)
+        self.brain.ask_permission_signal.connect(self.prompt_user)
+        self.brain.status_signal.connect(self.status.showMessage)
+        self.brain.start()
+
+    def prompt_user(self, cmd, reason):
+        self.reason_label.setText(f"💡 REASON: {reason}")
+        self.cmd_display.setText(cmd)
+        self.btn_approve.setEnabled(True)
+
+    def approve(self):
+        self.btn_approve.setEnabled(False)
+        self.brain.approve_command()
+
+    def update_log(self, msg, color):
+        self.console.append(f"<font color='{color}'>{msg}</font>")
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python3 ghena_pro_ai.py <IP>")
-        sys.exit(1)
-
-    ip = sys.argv[1]
-    app = GhenaProAI(ip)
-    app.run()
+    app = QApplication(sys.argv)
+    window = GhenaAI_V36(); window.show()
+    sys.exit(app.exec())
