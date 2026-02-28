@@ -1,0 +1,193 @@
+# ghena_pro_ai.py
+# ============================================================
+# GHENA-PRO-AI 🐙
+# Smart CTF Reasoning + Real Execution (Approval Based)
+# ============================================================
+
+import sys, subprocess
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import QThread, pyqtSignal
+
+# ============================================================
+# AI Reasoner (acts like ChatGPT thinking)
+# ============================================================
+def ai_reasoner(tool_output: str) -> str:
+    prompt = f"""
+You are a professional CTF player and penetration tester.
+
+Analyze the following output and decide the best next step.
+
+Rules:
+- Think step by step like a human
+- Do NOT guess flags
+- Do NOT skip stages
+- Focus on Recon → Enum → Access → PrivEsc
+
+OUTPUT:
+{tool_output}
+
+Respond EXACTLY in this format:
+STAGE:
+TOOL:
+COMMAND:
+REASON:
+"""
+
+    result = subprocess.run(
+        ["ollama", "run", "mistral"],
+        input=prompt,
+        text=True,
+        capture_output=True
+    )
+    return result.stdout.strip()
+
+# ============================================================
+# Execution Worker (Real Commands)
+# ============================================================
+class ExecutionWorker(QThread):
+    output_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal(str)
+
+    def __init__(self, cmd):
+        super().__init__()
+        self.cmd = cmd
+        self.buffer = ""
+
+    def run(self):
+        process = subprocess.Popen(
+            self.cmd,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        for line in process.stdout:
+            self.buffer += line
+            self.output_signal.emit(line.rstrip())
+        process.wait()
+        self.finished_signal.emit(self.buffer)
+
+# ============================================================
+# GUI
+# ============================================================
+class GHENA_PRO_AI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("GHENA-PRO-AI 🐙 | Smart CTF Engine")
+        self.setMinimumSize(1100, 850)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        # Target
+        top = QHBoxLayout()
+        self.ip_input = QLineEdit()
+        self.ip_input.setPlaceholderText("Target IP (CTF / Lab)")
+        top.addWidget(QLabel("IP:"))
+        top.addWidget(self.ip_input)
+        layout.addLayout(top)
+
+        # Buttons
+        self.start_btn = QPushButton("🚀 START AI-GUIDED ATTACK")
+        self.start_btn.setFixedHeight(50)
+        self.start_btn.clicked.connect(self.start_recon)
+        layout.addWidget(self.start_btn)
+
+        # AI Reasoning Box
+        self.ai_box = QTextEdit()
+        self.ai_box.setReadOnly(True)
+        self.ai_box.setMaximumHeight(180)
+        self.ai_box.setStyleSheet(
+            "background:#111;color:#00ccff;font-family:monospace;font-size:13px;"
+        )
+        layout.addWidget(QLabel("🧠 AI Reasoning"))
+        layout.addWidget(self.ai_box)
+
+        # Console
+        self.console = QTextEdit()
+        self.console.setReadOnly(True)
+        self.console.setStyleSheet(
+            "background:#000;color:#39ff14;font-family:monospace;font-size:12px;"
+        )
+        layout.addWidget(QLabel("🖥 Live Console"))
+        layout.addWidget(self.console)
+
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+
+    # --------------------------------------------------------
+    def log(self, txt):
+        self.console.append(txt)
+
+    # --------------------------------------------------------
+    # Phase 1 – Recon
+    # --------------------------------------------------------
+    def start_recon(self):
+        ip = self.ip_input.text().strip()
+        if not ip:
+            QMessageBox.warning(self, "Error", "Enter target IP first")
+            return
+
+        self.console.clear()
+        self.ai_box.setText("🔍 Recon stage: running Nmap to profile the machine")
+
+        cmd = f"nmap -sC -sV -Pn {ip}"
+        self.log(f"[EXEC] {cmd}")
+
+        self.worker = ExecutionWorker(cmd)
+        self.worker.output_signal.connect(self.log)
+        self.worker.finished_signal.connect(self.ai_decide_next)
+        self.worker.start()
+
+    # --------------------------------------------------------
+    # AI Decision Engine
+    # --------------------------------------------------------
+    def ai_decide_next(self, output):
+        self.log("\n[🧠] Sending output to AI for analysis...\n")
+        ai_response = ai_reasoner(output)
+        self.ai_box.setText(ai_response)
+
+        # Extract command from AI response
+        cmd = None
+        for line in ai_response.splitlines():
+            if line.startswith("COMMAND:"):
+                cmd = line.replace("COMMAND:", "").strip()
+
+        if not cmd or cmd == "NONE":
+            self.log("[!] AI did not recommend a command.")
+            return
+
+        # Ask user approval
+        reply = QMessageBox.question(
+            self,
+            "AI Decision",
+            f"AI suggests executing:\n\n{cmd}\n\nExecute now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            self.execute_ai_command(cmd)
+        else:
+            self.log("[✋] Execution skipped by user.")
+
+    # --------------------------------------------------------
+    # Execute AI Selected Tool
+    # --------------------------------------------------------
+    def execute_ai_command(self, cmd):
+        self.log(f"\n[🚀 AI-SELECTED EXECUTION]\n{cmd}\n")
+
+        self.worker = ExecutionWorker(cmd)
+        self.worker.output_signal.connect(self.log)
+        self.worker.finished_signal.connect(self.ai_decide_next)
+        self.worker.start()
+
+# ============================================================
+# Run
+# ============================================================
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = GHENA_PRO_AI()
+    win.show()
+    sys.exit(app.exec())
