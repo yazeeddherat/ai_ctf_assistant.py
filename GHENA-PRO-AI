@@ -3,8 +3,8 @@
 
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║              GHENA 58 EASY CTF SOLVER                         ║
-║       جميع الغرف السهلة المجانية في TryHackMe (58 غرفة)      ║
+║              GHENA ULTIMATE EASY CTF SOLVER                   ║
+║       حل ذكي لأي غرفة سهلة حتى لو غير معروفة في قاعدة البيانات ║
 ║                  جميع الحقوق محفوظة © 2026                    ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
@@ -30,69 +30,14 @@ BLACK = '#000000'
 WHITE = '#ffffff'
 
 # مسار قاعدة البيانات
-DB_PATH = Path(__file__).parent / "thm_58_easy_rooms.json"
+DB_PATH = Path(__file__).parent / "easy_ctf_rooms.json"
 
-# ======================= قاعدة بيانات الـ 58 غرفة =======================
-EASY_ROOMS_DB = {
-    # 1. Bounty Hacker
-    "bounty_hacker": {
-        "name": "Bounty Hacker",
-        "difficulty": "Easy",
-        "ports": [21, 22, 80],
-        "services": {"21": "ftp", "22": "ssh", "80": "http"},
-        "ftp_anonymous": True,
-        "ftp_files": ["task.txt", "locks.txt"],
-        "usernames": ["lin", "root"],
-        "passwords": ["root", "toor"],
-        "user_flag": "THM{...}",
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 2. RootMe
-    "rootme": {
-        "name": "RootMe",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "directories": ["/panel", "/uploads", "/css", "/js"],
-        "cms": None,
-        "user_flag": "THM{...}",
-        "root_flag": "THM{...}",
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 3. Pickle Rick
-    "pickle_rick": {
-        "name": "Pickle Rick",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "usernames": ["rick", "morty"],
-        "passwords": ["R1ckRul3s", "M0rtyRul3s"],
-        "answers": [
-            "What is the first ingredient? → mr meeseek hair",
-            "What is the second ingredient? → 1 jerry tear",
-            "What is the third ingredient? → fleeb juice"
-        ]
-    },
-    # 4. Simple CTF
+# قاعدة بيانات أولية (سيتم إنشاؤها تلقائياً)
+DEFAULT_ROOMS = {
     "simple_ctf": {
         "name": "Simple CTF",
-        "difficulty": "Easy",
         "ports": [21, 80, 2222],
         "services": {"21": "ftp", "80": "http", "2222": "ssh"},
-        "cms": "CMS Made Simple 2.2.8",
-        "cve": "CVE-2019-9053",
-        "hash": "0c01f4468bd75d7a84c7eb73846e8d96",
-        "password": "secret",
-        "user_flag": "G00d j0b, keep up!",
-        "other_user": "sunbath",
-        "privesc_tool": "vim",
-        "root_flag": "W3ll d0n3. You made it!",
         "answers": [
             "How many services are running under port 1000? → 2",
             "What is running on the higher port? → ssh",
@@ -106,587 +51,28 @@ EASY_ROOMS_DB = {
             "What's the root flag? → W3ll d0n3. You made it!"
         ]
     },
-    # 5. LazyAdmin
-    "lazy_admin": {
-        "name": "LazyAdmin",
-        "difficulty": "Easy",
-        "ports": [80],
-        "services": {"80": "http"},
-        "directories": ["/content", "/content/inc", "/content/as"],
-        "cms": "SweetRice",
-        "user_flag": "THM{...}",
-        "answers": [
-            "What is the user flag? → THM{...}"
-        ]
-    },
-    # 6. c4ptur3-th3-fl4g
-    "c4ptur3_th3_fl4g": {
-        "name": "c4ptur3-th3-fl4g",
-        "difficulty": "Easy",
-        "ports": [80],
-        "services": {"80": "http"},
-        "answers": [
-            "What is the flag? → THM{...}"
-        ]
-    },
-    # 7. GamingServer
-    "gamingserver": {
-        "name": "GamingServer",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "usernames": ["john", "root"],
-        "user_flag": "THM{...}",
-        "root_flag": "THM{...}",
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 8. Overpass
-    "overpass": {
-        "name": "Overpass",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "passwords": ["saydrawnlyingpicture"],
-        "answers": [
-            "What is the overpass password? → saydrawnlyingpicture"
-        ]
-    },
-    # 9. OhSINT
-    "ohsint": {
-        "name": "OhSINT",
-        "difficulty": "Easy",
-        "ports": [],
-        "services": {},
-        "answers": [
-            "What is the user's city? → New York",
-            "What is the SSID of the access point? → UnileverWifi",
-            "What is the user's password? → pennydreadful"
-        ]
-    },
-    # 10. Tomghost
-    "tomghost": {
-        "name": "Tomghost",
-        "difficulty": "Easy",
-        "ports": [22, 53, 8009, 8080],
-        "services": {"22": "ssh", "53": "domain", "8009": "ajp13", "8080": "http"},
-        "cve": "CVE-2020-1938",
-        "answers": [
-            "Compromise the machine and locate user.txt → THM{...}",
-            "Escalate privileges and obtain root.txt → THM{...}"
-        ]
-    },
-    # 11. VulnNet
-    "vulnnet": {
-        "name": "VulnNet",
-        "difficulty": "Easy",
-        "ports": [22, 80, 6379],
-        "services": {"22": "ssh", "80": "http", "6379": "redis"},
-        "answers": []
-    },
-    # 12. Startup
-    "startup": {
-        "name": "Startup",
-        "difficulty": "Easy",
-        "ports": [21, 22, 80],
-        "services": {"21": "ftp", "22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}"
-        ]
-    },
-    # 13. Git Happens
-    "git_happens": {
-        "name": "Git Happens",
-        "difficulty": "Easy",
-        "ports": [80],
-        "services": {"80": "http"},
-        "passwords": ["Th1s_1s_4_L0ng_4nd_S3cur3_P4ssw0rd"],
-        "answers": [
-            "What is the super secret password? → Th1s_1s_4_L0ng_4nd_S3cur3_P4ssw0rd"
-        ]
-    },
-    # 14. Wonderland
-    "wonderland": {
-        "name": "Wonderland",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": []
-    },
-    # 15. Mr Robot
-    "mr_robot": {
-        "name": "Mr Robot",
-        "difficulty": "Easy",
-        "ports": [22, 80, 443],
-        "services": {"22": "ssh", "80": "http", "443": "https"},
-        "answers": []
-    },
-    # 16. Kenobi
-    "kenobi": {
-        "name": "Kenobi",
-        "difficulty": "Easy",
-        "ports": [21, 22, 80, 111, 139, 445, 2049],
-        "services": {"21": "ftp", "22": "ssh", "80": "http", "111": "rpcbind", "139": "netbios-ssn", "445": "microsoft-ds", "2049": "nfs"},
-        "ftp_anonymous": True,
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 17. Basic Pentesting
-    "basic_pentesting": {
-        "name": "Basic Pentesting",
-        "difficulty": "Easy",
-        "ports": [22, 80, 139, 445, 8009, 8080],
-        "services": {"22": "ssh", "80": "http", "139": "netbios-ssn", "445": "microsoft-ds", "8009": "ajp13", "8080": "http"},
-        "answers": [
-            "What is the name of the secret folder? → development",
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 18. Ice
-    "ice": {
-        "name": "Ice",
-        "difficulty": "Easy",
-        "ports": [22, 80, 135, 139, 445, 3389, 8080],
-        "services": {"22": "ssh", "80": "http", "135": "msrpc", "139": "netbios-ssn", "445": "microsoft-ds", "3389": "ms-wbt-server", "8080": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 19. Blue
-    "blue": {
-        "name": "Blue",
-        "difficulty": "Easy",
-        "ports": [135, 139, 445, 3389],
-        "services": {"135": "msrpc", "139": "netbios-ssn", "445": "microsoft-ds", "3389": "ms-wbt-server"},
-        "cve": "MS17-010",
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 20. Lian_Yu
-    "lian_yu": {
-        "name": "Lian_Yu",
-        "difficulty": "Easy",
-        "ports": [21, 22, 80, 111, 1337, 2049],
-        "services": {"21": "ftp", "22": "ssh", "80": "http", "111": "rpcbind", "1337": "unknown", "2049": "nfs"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 21. The Cod Caper
-    "the_cod_caper": {
-        "name": "The Cod Caper",
-        "difficulty": "Easy",
+    "pickle_rick": {
+        "name": "Pickle Rick",
         "ports": [22, 80],
         "services": {"22": "ssh", "80": "http"},
         "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
+            "What is the first ingredient? → mr meeseek hair",
+            "What is the second ingredient? → 1 jerry tear",
+            "What is the third ingredient? → fleeb juice"
         ]
-    },
-    # 22. Wgel CTF
-    "wgel_ctf": {
-        "name": "Wgel CTF",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 23. Dav
-    "dav": {
-        "name": "Dav",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 24. Ninja Skills
-    "ninja_skills": {
-        "name": "Ninja Skills",
-        "difficulty": "Easy",
-        "ports": [22],
-        "services": {"22": "ssh"},
-        "answers": [
-            "What is the user flag? → THM{...}"
-        ]
-    },
-    # 25. Anonforce
-    "anonforce": {
-        "name": "Anonforce",
-        "difficulty": "Easy",
-        "ports": [21, 22],
-        "services": {"21": "ftp", "22": "ssh"},
-        "ftp_anonymous": True,
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 26. Ignite
-    "ignite": {
-        "name": "Ignite",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "cms": "Fuel CMS",
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 27. Thompson
-    "thompson": {
-        "name": "Thompson",
-        "difficulty": "Easy",
-        "ports": [22, 80, 8080],
-        "services": {"22": "ssh", "80": "http", "8080": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 28. Library
-    "library": {
-        "name": "Library",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 29. Fowsniff CTF
-    "fowsniff_ctf": {
-        "name": "Fowsniff CTF",
-        "difficulty": "Easy",
-        "ports": [22, 80, 443],
-        "services": {"22": "ssh", "80": "http", "443": "https"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 30. AttackerKB
-    "attackerkb": {
-        "name": "AttackerKB",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 31. OverlayFS - CVE-2021-3493
-    "overlayfs": {
-        "name": "OverlayFS - CVE-2021-3493",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "cve": "CVE-2021-3493",
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 32. Psycho Break
-    "psycho_break": {
-        "name": "Psycho Break",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 33. Madness
-    "madness": {
-        "name": "Madness",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 34. Unstable Twin
-    "unstable_twin": {
-        "name": "Unstable Twin",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 35. Cicada-3301 Vol:1
-    "cicada3301": {
-        "name": "Cicada-3301 Vol:1",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 36. Musical Stego
-    "musical_stego": {
-        "name": "Musical Stego",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 37. Jack-of-All-Trades
-    "jack_of_all_trades": {
-        "name": "Jack-of-All-Trades",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 38. Bolt
-    "bolt": {
-        "name": "Bolt",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 39. Develpy
-    "develpy": {
-        "name": "Develpy",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 40. Year of the Rabbit
-    "year_of_the_rabbit": {
-        "name": "Year of the Rabbit",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 41. Vulnversity
-    "vulnversity": {
-        "name": "Vulnversity",
-        "difficulty": "Easy",
-        "ports": [21, 22, 80, 139, 445, 3128],
-        "services": {"21": "ftp", "22": "ssh", "80": "http", "139": "netbios-ssn", "445": "microsoft-ds", "3128": "squid-http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 42. Agent Sudo
-    "agent_sudo": {
-        "name": "Agent Sudo",
-        "difficulty": "Easy",
-        "ports": [21, 22, 80],
-        "services": {"21": "ftp", "22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 43. Brute It
-    "brute_it": {
-        "name": "Brute It",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 44. Blaster
-    "blaster": {
-        "name": "Blaster",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 45. Inclusion
-    "inclusion": {
-        "name": "Inclusion",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 46. LFI Basics
-    "lfi_basics": {
-        "name": "LFI Basics",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 47. Juicy Details
-    "juicy_details": {
-        "name": "Juicy Details",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {"22": "ssh", "80": "http"},
-        "answers": [
-            "What is the user flag? → THM{...}",
-            "What is the root flag? → THM{...}"
-        ]
-    },
-    # 48. WebAppSec 101
-    "webappsec_101": {
-        "name": "WebAppSec 101",
-        "difficulty": "Easy",
-        "ports": [80],
-        "services": {"80": "http"},
-        "answers": []
-    },
-    # 49. Vulnerabilities 101
-    "vulns_101": {
-        "name": "Vulnerabilities 101",
-        "difficulty": "Easy",
-        "ports": [80],
-        "services": {"80": "http"},
-        "answers": []
-    },
-    # 50. Walking An Application
-    "walking_an_app": {
-        "name": "Walking An Application",
-        "difficulty": "Easy",
-        "ports": [80],
-        "services": {"80": "http"},
-        "answers": []
-    },
-    # 51. OWASP Top 10
-    "owasp_top_10": {
-        "name": "OWASP Top 10",
-        "difficulty": "Easy",
-        "ports": [80],
-        "services": {"80": "http"},
-        "answers": []
-    },
-    # 52. OWASP Juice Shop
-    "owasp_juice_shop": {
-        "name": "OWASP Juice Shop",
-        "difficulty": "Easy",
-        "ports": [3000, 80],
-        "services": {"3000": "http", "80": "http"},
-        "answers": []
-    },
-    # 53. DVWA
-    "dvwa": {
-        "name": "DVWA",
-        "difficulty": "Easy",
-        "ports": [80],
-        "services": {"80": "http"},
-        "answers": []
-    },
-    # 54. WebGOAT
-    "webgoat": {
-        "name": "WebGOAT",
-        "difficulty": "Easy",
-        "ports": [8080],
-        "services": {"8080": "http"},
-        "answers": []
-    },
-    # 55. VulnNet
-    "vulnnet_again": {
-        "name": "VulnNet",
-        "difficulty": "Easy",
-        "ports": [22, 80, 6379],
-        "services": {"22": "ssh", "80": "http", "6379": "redis"},
-        "answers": []
-    },
-    # 56. Intro To Pwntools
-    "intro_pwntools": {
-        "name": "Intro To Pwntools",
-        "difficulty": "Easy",
-        "ports": [22],
-        "services": {"22": "ssh"},
-        "answers": []
-    },
-    # 57. Sudo Security Bypass
-    "sudo_security_bypass": {
-        "name": "Sudo Security Bypass",
-        "difficulty": "Easy",
-        "ports": [22],
-        "services": {"22": "ssh"},
-        "answers": []
-    },
-    # 58. Sudo Buffer Overflow
-    "sudo_buffer_overflow": {
-        "name": "Sudo Buffer Overflow",
-        "difficulty": "Easy",
-        "ports": [22],
-        "services": {"22": "ssh"},
-        "answers": []
     }
 }
 
-# إنشاء قاعدة البيانات إذا لم توجد
-if not DB_PATH.exists():
-    with open(DB_PATH, 'w', encoding='utf-8') as f:
-        json.dump(EASY_ROOMS_DB, f, indent=4, ensure_ascii=False)
-else:
-    # تحميل الملف الموجود
-    with open(DB_PATH, 'r', encoding='utf-8') as f:
-        EASY_ROOMS_DB = json.load(f)
-
-class Ghena58GUI:
+class GhenaSmartSolver:
     def __init__(self, root):
         self.root = root
-        self.root.title("GHENA 58 EASY CTF SOLVER - جميع الغرف السهلة المجانية")
-        self.root.geometry("1100x800")
+        self.root.title("GHENA SMART EASY CTF SOLVER")
+        self.root.geometry("1200x850")
         self.root.configure(bg=BLACK)
         
-        # متغيرات
+        # تحميل قاعدة البيانات أو إنشاؤها
+        self.rooms_db = self.load_db()
+        
         self.attack_thread = None
         self.output_queue = queue.Queue()
         self.current_ip = ""
@@ -695,6 +81,15 @@ class Ghena58GUI:
         self.setup_ui()
         self.update_output()
         
+    def load_db(self):
+        if DB_PATH.exists():
+            with open(DB_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        else:
+            with open(DB_PATH, 'w', encoding='utf-8') as f:
+                json.dump(DEFAULT_ROOMS, f, indent=4)
+            return DEFAULT_ROOMS.copy()
+            
     def reset_results(self):
         return {
             "ip": "",
@@ -711,20 +106,17 @@ class Ghena58GUI:
         }
         
     def setup_ui(self):
-        # الإطار العلوي
         top_frame = tk.Frame(self.root, bg=BLACK)
         top_frame.pack(pady=10, fill=tk.X)
         
-        # الشعار
-        title = tk.Label(top_frame, text="GHENA 58", font=("Courier", 40, "bold"),
+        title = tk.Label(top_frame, text="GHENA SMART", font=("Courier", 40, "bold"),
                          fg=GREEN, bg=BLACK)
         title.pack()
         
-        subtitle = tk.Label(top_frame, text="58 Easy CTF Rooms (TryHackMe Free)",
+        subtitle = tk.Label(top_frame, text="Easy CTF Solver (Auto-Recon + DB)",
                             font=("Arial", 14), fg=GREEN, bg=BLACK)
         subtitle.pack()
         
-        # إطار الإدخال
         input_frame = tk.Frame(self.root, bg=BLACK)
         input_frame.pack(pady=10)
         
@@ -740,7 +132,6 @@ class Ghena58GUI:
                                     bg=GREEN, fg=BLACK, command=self.start_attack)
         self.start_btn.pack(side=tk.LEFT, padx=10)
         
-        # إطار النتائج
         output_frame = tk.Frame(self.root, bg=BLACK)
         output_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         
@@ -750,7 +141,6 @@ class Ghena58GUI:
                                                       insertbackground=GREEN)
         self.output_text.pack(fill=tk.BOTH, expand=True)
         
-        # إطار الأزرار السفلية
         bottom_frame = tk.Frame(self.root, bg=BLACK)
         bottom_frame.pack(pady=10)
         
@@ -769,8 +159,8 @@ class Ghena58GUI:
                                    bg=DARK_GREEN, fg=WHITE, command=self.root.quit)
         self.exit_btn.pack(side=tk.LEFT, padx=5)
         
-        self.log("⚡ GHENA 58 initialized. Ready to attack 58 easy CTF rooms!")
-        self.log("=" * 60)
+        self.log(f"✅ GHENA SMART loaded with {len(self.rooms_db)} rooms in DB.")
+        self.log("="*60)
         
     def log(self, message, color=GREEN):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -794,53 +184,40 @@ class Ghena58GUI:
             messagebox.showwarning("Warning", "No results to save yet.")
             return
             
-        filename = f"GHENA58_{self.current_ip}_{int(time.time())}.txt"
+        filename = f"GHENA_{self.current_ip}_{int(time.time())}.txt"
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write("="*60 + "\n")
-                f.write("GHENA 58 EASY CTF SOLVER - RESULTS\n")
+                f.write("GHENA SMART SOLVER - RESULTS\n")
                 f.write(f"Target IP: {self.current_ip}\n")
                 f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("="*60 + "\n\n")
-                
                 f.write(f"Open Ports ({len(self.results['ports'])}):\n")
                 for p in sorted(self.results['ports']):
                     svc = self.results['services'].get(p, 'unknown')
                     f.write(f"  {p}: {svc}\n")
                 f.write("\n")
-                
                 if self.results['cms']:
                     f.write(f"CMS: {self.results['cms']}\n\n")
-                    
                 if self.results['usernames']:
-                    f.write("Usernames found:\n")
+                    f.write("Usernames:\n")
                     for u in sorted(self.results['usernames']):
                         f.write(f"  {u}\n")
                     f.write("\n")
-                    
                 if self.results['passwords']:
-                    f.write("Passwords/Hashes found:\n")
+                    f.write("Passwords/Hashes:\n")
                     for p in sorted(self.results['passwords']):
                         f.write(f"  {p}\n")
                     f.write("\n")
-                    
-                if self.results['hashes']:
-                    f.write("Hashes found:\n")
-                    for h in sorted(self.results['hashes']):
-                        f.write(f"  {h}\n")
-                    f.write("\n")
-                    
                 if self.results['flags']:
-                    f.write("Flags found:\n")
+                    f.write("Flags:\n")
                     for fl in sorted(self.results['flags']):
                         f.write(f"  {fl}\n")
                     f.write("\n")
-                    
                 if self.results['answers']:
-                    f.write("Answers to questions:\n")
+                    f.write("Answers:\n")
                     for ans in self.results['answers']:
                         f.write(f"  {ans}\n")
-                        
             messagebox.showinfo("Success", f"Results saved to {filename}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save: {e}")
@@ -858,22 +235,12 @@ class Ghena58GUI:
             self.log(f"    ❌ Error: {e}")
         return ""
         
-    def parse_nmap_output(self, output):
-        for line in output.split('\n'):
-            m = re.search(r'(\d+)/tcp\s+open\s+(\S+)', line)
-            if m:
-                port, svc = int(m.group(1)), m.group(2)
-                if port not in self.results["ports"]:
-                    self.results["ports"].append(port)
-                    self.results["services"][port] = svc
-                    self.log(f"    🔓 Port {port}: {svc}")
-                    
-    def identify_easy_room(self):
+    def identify_room(self):
+        """محاولة التعرف على الغرفة من قاعدة البيانات باستخدام المنافذ"""
         ports_set = set(self.results["ports"])
         best_match = None
         best_score = 0
-        
-        for room_id, data in EASY_ROOMS_DB.items():
+        for room_id, data in self.rooms_db.items():
             known_ports = set(data.get("ports", []))
             if not known_ports:
                 continue
@@ -881,50 +248,159 @@ class Ghena58GUI:
             if score > best_score:
                 best_score = score
                 best_match = room_id
-                
-        if best_match and best_score >= len(EASY_ROOMS_DB[best_match]["ports"]) * 0.6:
-            self.log(f"\n✅ Room identified: {EASY_ROOMS_DB[best_match].get('name', best_match)}")
+        if best_match and best_score >= len(self.rooms_db[best_match]["ports"]) * 0.6:
             return best_match
         return None
         
     def display_room_answers(self, room_id):
-        data = EASY_ROOMS_DB[room_id]
+        data = self.rooms_db[room_id]
         self.log("\n" + "="*60)
-        self.log(f"🎯 ROOM: {data.get('name', room_id)} (Easy)")
+        self.log(f"✅ ROOM FOUND IN DB: {data.get('name', room_id)}")
         self.log("="*60)
-        
         if "answers" in data and data["answers"]:
             self.results["answers"] = data["answers"]
             for ans in data["answers"]:
-                self.log(f"  ✅ {ans}")
+                self.log(f"  ▶️ {ans}")
         else:
-            self.log("  No predefined answers for this room.")
+            self.log("  No answers in DB for this room.")
             
-        if "user_flag" in data:
-            self.results["flags"].add(data["user_flag"])
-        if "root_flag" in data:
-            self.results["flags"].add(data["root_flag"])
-        if "password" in data:
-            self.results["passwords"].add(data["password"])
-        if "hash" in data:
-            self.results["hashes"].add(data["hash"])
-        if "usernames" in data:
-            for u in data["usernames"]:
-                self.results["usernames"].add(u)
+    # ========== مراحل الفحص الشامل (إذا لم توجد الغرفة في DB) ==========
+    def scan_web(self, ip, port):
+        protocol = 'https' if port in [443,8443] else 'http'
+        self.log(f"    🌐 Scanning web on port {port}...")
+        # whatweb
+        out = self.run_cmd(f"whatweb {protocol}://{ip}:{port}")
+        if out:
+            techs = re.findall(r'([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\[', out)
+            for t in techs:
+                self.results["web_techs"].add(t)
+        # gobuster سريع
+        out = self.run_cmd(f"gobuster dir -u {protocol}://{ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50 -q")
+        if out:
+            dirs = re.findall(r'/(\S+)\s+\(Status: 200\)', out)
+            for d in dirs:
+                self.results["directories"].add(d)
+        # curl الصفحة الرئيسية
+        out = self.run_cmd(f"curl -s {protocol}://{ip}:{port}")
+        if out:
+            cms_keywords = ['WordPress', 'Joomla', 'Drupal', 'Magento', 'Simple Image Gallery', 'CMS Made Simple']
+            for cms in cms_keywords:
+                if cms.lower() in out.lower():
+                    self.results["cms"] = cms
+                    break
+                    
+    def scan_ftp(self, ip):
+        if 21 not in self.results["ports"]:
+            return
+        self.log("    📁 Checking FTP...")
+        out = self.run_cmd(f"nmap --script ftp-anon -p 21 {ip}")
+        if "Anonymous FTP login allowed" in out:
+            self.log("      ✅ FTP anonymous login allowed")
+            ftp_out = self.run_cmd(f"echo -e 'anonymous\\n\\nls\\nbye' | ftp -n {ip} 2>/dev/null")
+            files = re.findall(r'^-rw-r--r--.*?(\S+)$', ftp_out, re.MULTILINE)
+            if files:
+                self.log(f"      Files: {', '.join(files)}")
                 
+    def scan_smb(self, ip):
+        if any(p in [139,445] for p in self.results["ports"]):
+            self.log("    📁 Checking SMB...")
+            out = self.run_cmd(f"enum4linux -a {ip}")
+            if out:
+                users = re.findall(r'user:\[(\S+)\]', out)
+                for u in users:
+                    self.results["usernames"].add(u)
+                    
+    def scan_ssh(self, ip):
+        if 22 in self.results["ports"]:
+            self.log("    🔐 Checking SSH...")
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(5)
+                sock.connect((ip, 22))
+                banner = sock.recv(1024).decode()
+                sock.close()
+                self.log(f"      Banner: {banner.strip()}")
+            except:
+                pass
+                
+    def hunt_flags(self, ip, web_ports):
+        self.log("    🎯 Hunting for flags...")
+        flag_paths = [
+            "/flag.txt", "/root/flag.txt", "/root/root.txt", "/root.txt",
+            "/home/*/flag.txt", "/home/*/user.txt", "/user.txt",
+            "/var/www/flag.txt", "/tmp/flag.txt", "/.flag",
+            "/secret.txt"
+        ]
+        for port in web_ports:
+            protocol = 'https' if port in [443,8443] else 'http'
+            for path in flag_paths:
+                out = self.run_cmd(f"curl -s {protocol}://{ip}:{port}{path}")
+                if out and len(out) < 500:
+                    patterns = [r'THM\{[^}]+\}', r'flag\{[^}]+\}', r'FLAG\{[^}]+\}',
+                                r'G00d j0b', r'W3ll d0n3']
+                    for pat in patterns:
+                        matches = re.findall(pat, out)
+                        for m in matches:
+                            self.results["flags"].add(m)
+                            self.log(f"      🎯 Found: {m}")
+                            
+    def extract_info(self):
+        for f in Path(".").glob("*.txt"):
+            if f.name.startswith("GHENA_"):
+                continue
+            try:
+                content = f.read_text(encoding='utf-8', errors='ignore')
+                user_pats = [r'username:\s*(\S+)', r'user:\s*(\S+)', r'login:\s*(\S+)']
+                for pat in user_pats:
+                    matches = re.findall(pat, content, re.IGNORECASE)
+                    for m in matches:
+                        self.results["usernames"].add(m.strip())
+                pass_pats = [r'password:\s*(\S+)', r'pass:\s*(\S+)', r'([a-f0-9]{32})']
+                for pat in pass_pats:
+                    matches = re.findall(pat, content, re.IGNORECASE)
+                    for m in matches:
+                        if len(m) > 4:
+                            self.results["passwords"].add(m.strip())
+            except:
+                pass
+                
+    def show_summary(self):
+        self.log("\n" + "="*60)
+        self.log("📊 SUMMARY OF FINDINGS")
+        self.log("="*60)
+        self.log(f"Open ports: {len(self.results['ports'])}")
+        if self.results['ports']:
+            for p in sorted(self.results['ports']):
+                svc = self.results['services'].get(p, 'unknown')
+                self.log(f"  {p}: {svc}")
+        if self.results['web_techs']:
+            self.log(f"Web technologies: {', '.join(sorted(self.results['web_techs'])[:5])}")
+        if self.results['cms']:
+            self.log(f"CMS: {self.results['cms']}")
+        if self.results['directories']:
+            self.log(f"Directories: {', '.join(sorted(self.results['directories'])[:5])}")
+        if self.results['usernames']:
+            self.log(f"Usernames: {', '.join(sorted(self.results['usernames']))}")
+        if self.results['passwords']:
+            self.log(f"Passwords/Hashes: {', '.join(sorted(self.results['passwords']))}")
+        if self.results['flags']:
+            self.log(f"Flags: {', '.join(sorted(self.results['flags']))}")
+        if self.results['answers']:
+            self.log(f"Answers: {', '.join(self.results['answers'])}")
+        self.log("="*60)
+        
     def start_attack(self):
         ip = self.ip_entry.get().strip()
         if not ip:
             messagebox.showerror("Error", "Please enter target IP")
             return
-            
         self.current_ip = ip
         self.results = self.reset_results()
         self.results["ip"] = ip
         self.start_btn.config(state=tk.DISABLED, text="⚔️ ATTACKING...")
         self.log(f"\n{'='*60}")
         self.log(f"🎯 TARGET: {ip}")
-        self.log(f"{'='*60}\n")
+        self.log("="*60)
         
         self.attack_thread = threading.Thread(target=self.run_attack, args=(ip,))
         self.attack_thread.daemon = True
@@ -933,32 +409,69 @@ class Ghena58GUI:
     def run_attack(self, ip):
         try:
             # 1. nmap سريع
-            self.log("[1] 🔍 Running quick nmap scan (top 1000 ports)...")
-            output = self.run_cmd(f"nmap -F -sV -T4 {ip}", timeout=300)
-            if output:
-                self.parse_nmap_output(output)
-            else:
-                self.log("    ⚠️ Quick scan failed, trying full port scan...")
-                output = self.run_cmd(f"nmap -p- -T4 {ip}", timeout=600)
-                if output:
-                    self.parse_nmap_output(output)
-                    
+            self.log("[1] 🔍 Running quick nmap scan...")
+            out = self.run_cmd(f"nmap -F -sV -T4 {ip}", timeout=300)
+            if out:
+                for line in out.split('\n'):
+                    m = re.search(r'(\d+)/tcp\s+open\s+(\S+)', line)
+                    if m:
+                        port, svc = int(m.group(1)), m.group(2)
+                        self.results["ports"].append(port)
+                        self.results["services"][port] = svc
+                        self.log(f"    🔓 Port {port}: {svc}")
             if not self.results["ports"]:
-                self.log("    ❌ No open ports found. Target may be down.")
+                self.log("    ⚠️ No open ports found, trying full scan...")
+                out = self.run_cmd(f"nmap -p- -T4 {ip}", timeout=600)
+                if out:
+                    for line in out.split('\n'):
+                        m = re.search(r'(\d+)/tcp\s+open', line)
+                        if m:
+                            port = int(m.group(1))
+                            self.results["ports"].append(port)
+                            self.results["services"][port] = "unknown"
+                            self.log(f"    🔓 Port {port}: unknown")
+                            
+            if not self.results["ports"]:
+                self.log("❌ No open ports found. Target may be down.")
                 self.finish_attack()
                 return
                 
             # 2. محاولة التعرف على الغرفة
-            room = self.identify_easy_room()
-            if room:
-                self.display_room_answers(room)
+            room_id = self.identify_room()
+            if room_id:
+                self.display_room_answers(room_id)
                 self.finish_attack()
                 return
             else:
-                self.log("    ⚠️ Room not recognized in database.")
+                self.log("\n⚠️ Room not in database. Starting deep reconnaissance...")
                 
+            # 3. فحص الويب
+            web_ports = [p for p in self.results["ports"] if p in [80,443,8080,8443,8000,8888] or 'http' in self.results["services"].get(p,'')]
+            if web_ports:
+                self.log("[2] 🌐 Scanning web services...")
+                for port in web_ports:
+                    self.scan_web(ip, port)
+                    
+            # 4. فحص الخدمات الأخرى
+            self.log("[3] 📡 Enumerating services...")
+            self.scan_ftp(ip)
+            self.scan_smb(ip)
+            self.scan_ssh(ip)
+            
+            # 5. البحث عن الأعلام
+            if web_ports:
+                self.log("[4] 🎯 Hunting for flags...")
+                self.hunt_flags(ip, web_ports)
+                
+            # 6. استخراج المعلومات
+            self.log("[5] 📋 Extracting info from outputs...")
+            self.extract_info()
+            
+            # 7. عرض الملخص
+            self.show_summary()
+            
         except Exception as e:
-            self.log(f"❌ Error during attack: {e}")
+            self.log(f"❌ Error: {e}")
         finally:
             self.finish_attack()
             
@@ -968,7 +481,7 @@ class Ghena58GUI:
 
 def main():
     root = tk.Tk()
-    app = Ghena58GUI(root)
+    app = GhenaSmartSolver(root)
     root.mainloop()
 
 if __name__ == "__main__":
