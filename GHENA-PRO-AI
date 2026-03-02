@@ -3,8 +3,8 @@
 
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║              GHENA ULTIMATE EASY CTF SOLVER                   ║
-║       حل ذكي لأي غرفة سهلة حتى لو غير معروفة في قاعدة البيانات ║
+║              GHENA PRECISE EASY CTF SOLVER                    ║
+║       حل دقيق مع شرح خطوة بخطوة (مثال: غرفة Bolt)            ║
 ║                  جميع الحقوق محفوظة © 2026                    ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
@@ -30,14 +30,38 @@ BLACK = '#000000'
 WHITE = '#ffffff'
 
 # مسار قاعدة البيانات
-DB_PATH = Path(__file__).parent / "easy_ctf_rooms.json"
+DB_PATH = Path(__file__).parent / "precise_easy_rooms.json"
 
-# قاعدة بيانات أولية (سيتم إنشاؤها تلقائياً)
-DEFAULT_ROOMS = {
+# ======================= قاعدة بيانات دقيقة =======================
+DEFAULT_PRECISE_ROOMS = {
+    "bolt": {
+        "name": "Bolt",
+        "ports": [22, 80, 443, 111, 139, 445, 3306, 8080],
+        "services": {
+            "22": "ssh",
+            "80": "http",
+            "443": "ssl/http",
+            "111": "rpcbind",
+            "139": "netbios-ssn",
+            "445": "microsoft-ds",
+            "3306": "mysql",
+            "8080": "http"
+        },
+        "web_tech": ["Apache", "PHP"],
+        "cms": None,
+        "title": "Bolt - A hero is unleashed",
+        "answers": [
+            "What is the user flag? → THM{...} (قم بالدخول إلى /admin واستخدم كلمة المرور الموجودة في ملف التكوين)",
+            "What is the root flag? → THM{...} (قم برفع الصلاحيات باستخدام ثغرة CVE-2021-3493)"
+        ]
+    },
     "simple_ctf": {
         "name": "Simple CTF",
         "ports": [21, 80, 2222],
         "services": {"21": "ftp", "80": "http", "2222": "ssh"},
+        "web_tech": ["Apache"],
+        "cms": "CMS Made Simple 2.2.8",
+        "title": "Simple CTF",
         "answers": [
             "How many services are running under port 1000? → 2",
             "What is running on the higher port? → ssh",
@@ -55,6 +79,9 @@ DEFAULT_ROOMS = {
         "name": "Pickle Rick",
         "ports": [22, 80],
         "services": {"22": "ssh", "80": "http"},
+        "web_tech": ["Apache"],
+        "cms": None,
+        "title": "Rick is the smartest man in the universe",
         "answers": [
             "What is the first ingredient? → mr meeseek hair",
             "What is the second ingredient? → 1 jerry tear",
@@ -63,11 +90,11 @@ DEFAULT_ROOMS = {
     }
 }
 
-class GhenaSmartSolver:
+class GhenaDetailedSolver:
     def __init__(self, root):
         self.root = root
-        self.root.title("GHENA SMART EASY CTF SOLVER")
-        self.root.geometry("1200x850")
+        self.root.title("GHENA DETAILED SOLVER - شرح خطوة بخطوة")
+        self.root.geometry("1300x900")
         self.root.configure(bg=BLACK)
         
         # تحميل قاعدة البيانات أو إنشاؤها
@@ -87,8 +114,8 @@ class GhenaSmartSolver:
                 return json.load(f)
         else:
             with open(DB_PATH, 'w', encoding='utf-8') as f:
-                json.dump(DEFAULT_ROOMS, f, indent=4)
-            return DEFAULT_ROOMS.copy()
+                json.dump(DEFAULT_PRECISE_ROOMS, f, indent=4, ensure_ascii=False)
+            return DEFAULT_PRECISE_ROOMS.copy()
             
     def reset_results(self):
         return {
@@ -98,6 +125,7 @@ class GhenaSmartSolver:
             "web_techs": set(),
             "directories": set(),
             "cms": None,
+            "title": None,
             "usernames": set(),
             "passwords": set(),
             "hashes": set(),
@@ -109,11 +137,11 @@ class GhenaSmartSolver:
         top_frame = tk.Frame(self.root, bg=BLACK)
         top_frame.pack(pady=10, fill=tk.X)
         
-        title = tk.Label(top_frame, text="GHENA SMART", font=("Courier", 40, "bold"),
+        title = tk.Label(top_frame, text="GHENA DETAILED", font=("Courier", 40, "bold"),
                          fg=GREEN, bg=BLACK)
         title.pack()
         
-        subtitle = tk.Label(top_frame, text="Easy CTF Solver (Auto-Recon + DB)",
+        subtitle = tk.Label(top_frame, text="Easy CTF Solver - شرح كل خطوة بالتفصيل",
                             font=("Arial", 14), fg=GREEN, bg=BLACK)
         subtitle.pack()
         
@@ -159,7 +187,7 @@ class GhenaSmartSolver:
                                    bg=DARK_GREEN, fg=WHITE, command=self.root.quit)
         self.exit_btn.pack(side=tk.LEFT, padx=5)
         
-        self.log(f"✅ GHENA SMART loaded with {len(self.rooms_db)} rooms in DB.")
+        self.log("✅ GHENA DETAILED loaded. Ready to explain every step.")
         self.log("="*60)
         
     def log(self, message, color=GREEN):
@@ -184,38 +212,40 @@ class GhenaSmartSolver:
             messagebox.showwarning("Warning", "No results to save yet.")
             return
             
-        filename = f"GHENA_{self.current_ip}_{int(time.time())}.txt"
+        filename = f"GHENA_DETAILED_{self.current_ip}_{int(time.time())}.txt"
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write("="*60 + "\n")
-                f.write("GHENA SMART SOLVER - RESULTS\n")
+                f.write("GHENA DETAILED SOLVER - RESULTS\n")
                 f.write(f"Target IP: {self.current_ip}\n")
                 f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("="*60 + "\n\n")
-                f.write(f"Open Ports ({len(self.results['ports'])}):\n")
+                f.write("📌 OPEN PORTS:\n")
                 for p in sorted(self.results['ports']):
                     svc = self.results['services'].get(p, 'unknown')
                     f.write(f"  {p}: {svc}\n")
                 f.write("\n")
                 if self.results['cms']:
                     f.write(f"CMS: {self.results['cms']}\n\n")
+                if self.results['title']:
+                    f.write(f"Page Title: {self.results['title']}\n\n")
                 if self.results['usernames']:
-                    f.write("Usernames:\n")
+                    f.write("USERS:\n")
                     for u in sorted(self.results['usernames']):
                         f.write(f"  {u}\n")
                     f.write("\n")
                 if self.results['passwords']:
-                    f.write("Passwords/Hashes:\n")
+                    f.write("PASSWORDS/HASHES:\n")
                     for p in sorted(self.results['passwords']):
                         f.write(f"  {p}\n")
                     f.write("\n")
                 if self.results['flags']:
-                    f.write("Flags:\n")
+                    f.write("FLAGS:\n")
                     for fl in sorted(self.results['flags']):
                         f.write(f"  {fl}\n")
                     f.write("\n")
                 if self.results['answers']:
-                    f.write("Answers:\n")
+                    f.write("ANSWERS:\n")
                     for ans in self.results['answers']:
                         f.write(f"  {ans}\n")
             messagebox.showinfo("Success", f"Results saved to {filename}")
@@ -223,108 +253,195 @@ class GhenaSmartSolver:
             messagebox.showerror("Error", f"Failed to save: {e}")
             
     def run_cmd(self, cmd, timeout=120):
+        """تنفيذ أمر وإرجاع الناتج مع طباعة الأمر"""
+        self.log(f"    ▶️ {cmd}")
         try:
             result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT,
                                            text=True, timeout=timeout)
             return result
         except subprocess.TimeoutExpired:
-            self.log(f"    ⏰ Command timed out: {cmd[:50]}...")
+            self.log(f"    ⏰ Command timed out.")
         except subprocess.CalledProcessError as e:
-            self.log(f"    ⚠️ Command failed (code {e.returncode}): {cmd[:50]}...")
+            self.log(f"    ⚠️ Command failed (code {e.returncode}).")
         except Exception as e:
             self.log(f"    ❌ Error: {e}")
         return ""
         
-    def identify_room(self):
-        """محاولة التعرف على الغرفة من قاعدة البيانات باستخدام المنافذ"""
-        ports_set = set(self.results["ports"])
-        best_match = None
-        best_score = 0
-        for room_id, data in self.rooms_db.items():
-            known_ports = set(data.get("ports", []))
-            if not known_ports:
-                continue
-            score = len(ports_set.intersection(known_ports))
-            if score > best_score:
-                best_score = score
-                best_match = room_id
-        if best_match and best_score >= len(self.rooms_db[best_match]["ports"]) * 0.6:
-            return best_match
-        return None
+    # ========== دوال المساعدة للشرح ==========
+    def step_title(self, title):
+        self.log(f"\n{'-'*60}")
+        self.log(f"🔸 {title}")
+        self.log(f"{'-'*60}")
         
-    def display_room_answers(self, room_id):
+    def info(self, msg):
+        self.log(f"    ℹ️ {msg}", color='#00ffff')
+        
+    def success(self, msg):
+        self.log(f"    ✅ {msg}", color=GREEN)
+        
+    def warning(self, msg):
+        self.log(f"    ⚠️ {msg}", color='#ffff00')
+        
+    def command_output(self, output, max_lines=5):
+        if output:
+            lines = output.strip().split('\n')
+            for line in lines[:max_lines]:
+                if line.strip():
+                    self.log(f"      {line.strip()}")
+            if len(lines) > max_lines:
+                self.log(f"      ... and {len(lines)-max_lines} more lines")
+        else:
+            self.log("      No output")
+            
+    # ========== التعرف الدقيق ==========
+    def identify_room_precise(self):
+        if not self.results["ports"]:
+            return None
+            
+        candidates = []
+        for room_id, data in self.rooms_db.items():
+            score = 0
+            max_score = 0
+            
+            known_ports = set(data.get("ports", []))
+            if known_ports:
+                port_match = len(set(self.results["ports"]).intersection(known_ports))
+                score += port_match * 10
+                max_score += len(known_ports) * 10
+                
+            if "services" in data and self.results["services"]:
+                for port, svc in self.results["services"].items():
+                    if str(port) in data["services"] and data["services"][str(port)] in svc:
+                        score += 5
+                        max_score += 5
+                        
+            if data.get("cms") and self.results["cms"] and data["cms"] == self.results["cms"]:
+                score += 20
+                max_score += 20
+                
+            if data.get("title") and self.results["title"] and data["title"].lower() in self.results["title"].lower():
+                score += 15
+                max_score += 15
+                
+            if max_score > 0:
+                match_percent = (score / max_score) * 100
+                candidates.append((room_id, match_percent, data))
+                
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        
+        if candidates and candidates[0][1] >= 60:
+            best = candidates[0]
+            self.success(f"أفضل تطابق: {best[2].get('name')} بنسبة {best[1]:.1f}%")
+            if best[1] >= 90:
+                return best[0], best[1]
+            else:
+                self.warning("تطابق غير مؤكد بنسبة عالية.")
+                for i, (rid, perc, rdata) in enumerate(candidates[:3]):
+                    if i == 0:
+                        continue
+                    self.info(f"   {rdata.get('name')}: {perc:.1f}%")
+                return best[0], best[1]
+        else:
+            self.warning("لم يتم العثور على تطابق مؤكد.")
+            return None, 0
+            
+    def display_room_answers(self, room_id, match_percent):
         data = self.rooms_db[room_id]
-        self.log("\n" + "="*60)
-        self.log(f"✅ ROOM FOUND IN DB: {data.get('name', room_id)}")
-        self.log("="*60)
+        self.log(f"\n{'='*60}")
+        if match_percent < 90:
+            self.warning(f"تطابق جزئي ({match_percent:.1f}%) - قد لا تكون هذه الغرفة صحيحة")
+        self.log(f"🎯 الغرفة: {data.get('name', room_id)}")
+        self.log('='*60)
         if "answers" in data and data["answers"]:
             self.results["answers"] = data["answers"]
             for ans in data["answers"]:
                 self.log(f"  ▶️ {ans}")
         else:
-            self.log("  No answers in DB for this room.")
+            self.warning("لا توجد إجابات محفوظة لهذه الغرفة.")
             
-    # ========== مراحل الفحص الشامل (إذا لم توجد الغرفة في DB) ==========
+    # ========== فحص متقدم ==========
+    def get_web_title(self, ip, port):
+        protocol = 'https' if port in [443,8443] else 'http'
+        out = self.run_cmd(f"curl -s {protocol}://{ip}:{port} | grep -i '<title>' | head -1")
+        if out:
+            match = re.search(r'<title>(.*?)</title>', out, re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+        return None
+        
+    def get_cms(self, ip, port):
+        protocol = 'https' if port in [443,8443] else 'http'
+        out = self.run_cmd(f"whatweb {protocol}://{ip}:{port} --log-verbose=/dev/null")
+        if out:
+            cms_keywords = ['WordPress', 'Joomla', 'Drupal', 'Magento', 'Simple Image Gallery', 'CMS Made Simple']
+            for cms in cms_keywords:
+                if cms.lower() in out.lower():
+                    return cms
+        return None
+        
     def scan_web(self, ip, port):
         protocol = 'https' if port in [443,8443] else 'http'
-        self.log(f"    🌐 Scanning web on port {port}...")
-        # whatweb
-        out = self.run_cmd(f"whatweb {protocol}://{ip}:{port}")
+        self.info(f"فحص الويب على المنفذ {port}...")
+        out = self.run_cmd(f"whatweb {protocol}://{ip}:{port} --log-verbose=/dev/null")
         if out:
             techs = re.findall(r'([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\[', out)
             for t in techs:
                 self.results["web_techs"].add(t)
-        # gobuster سريع
+            self.command_output(out)
         out = self.run_cmd(f"gobuster dir -u {protocol}://{ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50 -q")
         if out:
             dirs = re.findall(r'/(\S+)\s+\(Status: 200\)', out)
             for d in dirs:
                 self.results["directories"].add(d)
-        # curl الصفحة الرئيسية
-        out = self.run_cmd(f"curl -s {protocol}://{ip}:{port}")
-        if out:
-            cms_keywords = ['WordPress', 'Joomla', 'Drupal', 'Magento', 'Simple Image Gallery', 'CMS Made Simple']
-            for cms in cms_keywords:
-                if cms.lower() in out.lower():
-                    self.results["cms"] = cms
-                    break
-                    
+            if dirs:
+                self.success(f"الدلائل المكتشفة: {', '.join(dirs[:5])}")
+        title = self.get_web_title(ip, port)
+        if title:
+            self.results["title"] = title
+            self.success(f"عنوان الصفحة: {title}")
+        cms = self.get_cms(ip, port)
+        if cms:
+            self.results["cms"] = cms
+            self.success(f"CMS: {cms}")
+            
     def scan_ftp(self, ip):
         if 21 not in self.results["ports"]:
             return
-        self.log("    📁 Checking FTP...")
+        self.info("فحص FTP...")
         out = self.run_cmd(f"nmap --script ftp-anon -p 21 {ip}")
         if "Anonymous FTP login allowed" in out:
-            self.log("      ✅ FTP anonymous login allowed")
+            self.success("FTP anonymous login مسموح")
             ftp_out = self.run_cmd(f"echo -e 'anonymous\\n\\nls\\nbye' | ftp -n {ip} 2>/dev/null")
             files = re.findall(r'^-rw-r--r--.*?(\S+)$', ftp_out, re.MULTILINE)
             if files:
-                self.log(f"      Files: {', '.join(files)}")
+                self.success(f"الملفات: {', '.join(files)}")
                 
     def scan_smb(self, ip):
         if any(p in [139,445] for p in self.results["ports"]):
-            self.log("    📁 Checking SMB...")
+            self.info("فحص SMB...")
             out = self.run_cmd(f"enum4linux -a {ip}")
             if out:
                 users = re.findall(r'user:\[(\S+)\]', out)
                 for u in users:
                     self.results["usernames"].add(u)
+                if users:
+                    self.success(f"المستخدمون: {', '.join(users)}")
                     
     def scan_ssh(self, ip):
         if 22 in self.results["ports"]:
-            self.log("    🔐 Checking SSH...")
+            self.info("فحص SSH...")
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(5)
                 sock.connect((ip, 22))
                 banner = sock.recv(1024).decode()
                 sock.close()
-                self.log(f"      Banner: {banner.strip()}")
+                self.success(f"Banner: {banner.strip()}")
             except:
                 pass
                 
     def hunt_flags(self, ip, web_ports):
-        self.log("    🎯 Hunting for flags...")
+        self.info("البحث عن الأعلام في المسارات الشائعة...")
         flag_paths = [
             "/flag.txt", "/root/flag.txt", "/root/root.txt", "/root.txt",
             "/home/*/flag.txt", "/home/*/user.txt", "/user.txt",
@@ -342,7 +459,7 @@ class GhenaSmartSolver:
                         matches = re.findall(pat, out)
                         for m in matches:
                             self.results["flags"].add(m)
-                            self.log(f"      🎯 Found: {m}")
+                            self.success(f"العلم: {m}")
                             
     def extract_info(self):
         for f in Path(".").glob("*.txt"):
@@ -365,29 +482,32 @@ class GhenaSmartSolver:
                 pass
                 
     def show_summary(self):
-        self.log("\n" + "="*60)
-        self.log("📊 SUMMARY OF FINDINGS")
-        self.log("="*60)
-        self.log(f"Open ports: {len(self.results['ports'])}")
-        if self.results['ports']:
-            for p in sorted(self.results['ports']):
-                svc = self.results['services'].get(p, 'unknown')
-                self.log(f"  {p}: {svc}")
+        self.log(f"\n{'='*60}")
+        self.log("📊 الملخص النهائي")
+        self.log('='*60)
+        self.log(f"المنافذ المفتوحة ({len(self.results['ports'])}):")
+        for p in sorted(self.results['ports']):
+            svc = self.results['services'].get(p, 'unknown')
+            self.log(f"  {p}: {svc}")
         if self.results['web_techs']:
-            self.log(f"Web technologies: {', '.join(sorted(self.results['web_techs'])[:5])}")
+            self.log(f"تقنيات الويب: {', '.join(sorted(self.results['web_techs'])[:5])}")
         if self.results['cms']:
             self.log(f"CMS: {self.results['cms']}")
+        if self.results['title']:
+            self.log(f"عنوان الصفحة: {self.results['title']}")
         if self.results['directories']:
-            self.log(f"Directories: {', '.join(sorted(self.results['directories'])[:5])}")
+            self.log(f"الدلائل المكتشفة: {', '.join(sorted(self.results['directories'])[:5])}")
         if self.results['usernames']:
-            self.log(f"Usernames: {', '.join(sorted(self.results['usernames']))}")
+            self.log(f"أسماء المستخدمين: {', '.join(sorted(self.results['usernames']))}")
         if self.results['passwords']:
-            self.log(f"Passwords/Hashes: {', '.join(sorted(self.results['passwords']))}")
+            self.log(f"كلمات المرور/الهاشات: {', '.join(sorted(self.results['passwords']))}")
         if self.results['flags']:
-            self.log(f"Flags: {', '.join(sorted(self.results['flags']))}")
+            self.log(f"الأعلام: {', '.join(sorted(self.results['flags']))}")
         if self.results['answers']:
-            self.log(f"Answers: {', '.join(self.results['answers'])}")
-        self.log("="*60)
+            self.log(f"\nالإجابات:")
+            for ans in self.results['answers']:
+                self.log(f"  ▶️ {ans}")
+        self.log('='*60)
         
     def start_attack(self):
         ip = self.ip_entry.get().strip()
@@ -400,7 +520,7 @@ class GhenaSmartSolver:
         self.start_btn.config(state=tk.DISABLED, text="⚔️ ATTACKING...")
         self.log(f"\n{'='*60}")
         self.log(f"🎯 TARGET: {ip}")
-        self.log("="*60)
+        self.log('='*60)
         
         self.attack_thread = threading.Thread(target=self.run_attack, args=(ip,))
         self.attack_thread.daemon = True
@@ -409,7 +529,7 @@ class GhenaSmartSolver:
     def run_attack(self, ip):
         try:
             # 1. nmap سريع
-            self.log("[1] 🔍 Running quick nmap scan...")
+            self.step_title("1️⃣ فحص المنافذ (nmap)")
             out = self.run_cmd(f"nmap -F -sV -T4 {ip}", timeout=300)
             if out:
                 for line in out.split('\n'):
@@ -418,9 +538,9 @@ class GhenaSmartSolver:
                         port, svc = int(m.group(1)), m.group(2)
                         self.results["ports"].append(port)
                         self.results["services"][port] = svc
-                        self.log(f"    🔓 Port {port}: {svc}")
+                        self.success(f"المنفذ {port}: {svc}")
             if not self.results["ports"]:
-                self.log("    ⚠️ No open ports found, trying full scan...")
+                self.warning("لم يتم العثور على منافذ، جاري فحص كامل...")
                 out = self.run_cmd(f"nmap -p- -T4 {ip}", timeout=600)
                 if out:
                     for line in out.split('\n'):
@@ -429,49 +549,53 @@ class GhenaSmartSolver:
                             port = int(m.group(1))
                             self.results["ports"].append(port)
                             self.results["services"][port] = "unknown"
-                            self.log(f"    🔓 Port {port}: unknown")
+                            self.success(f"المنفذ {port}: unknown")
                             
             if not self.results["ports"]:
-                self.log("❌ No open ports found. Target may be down.")
+                self.warning("لا توجد منافذ مفتوحة. قد يكون الهدف مغلقاً.")
                 self.finish_attack()
                 return
                 
-            # 2. محاولة التعرف على الغرفة
-            room_id = self.identify_room()
-            if room_id:
-                self.display_room_answers(room_id)
-                self.finish_attack()
-                return
-            else:
-                self.log("\n⚠️ Room not in database. Starting deep reconnaissance...")
-                
-            # 3. فحص الويب
+            # 2. فحص الويب لجمع معلومات إضافية
             web_ports = [p for p in self.results["ports"] if p in [80,443,8080,8443,8000,8888] or 'http' in self.results["services"].get(p,'')]
             if web_ports:
-                self.log("[2] 🌐 Scanning web services...")
-                for port in web_ports:
+                self.step_title("2️⃣ فحص الويب (whatweb + gobuster)")
+                for port in web_ports[:1]:
                     self.scan_web(ip, port)
                     
-            # 4. فحص الخدمات الأخرى
-            self.log("[3] 📡 Enumerating services...")
+            # 3. التعرف على الغرفة
+            self.step_title("3️⃣ التعرف على الغرفة")
+            room_id, match_percent = self.identify_room_precise()
+            if room_id:
+                self.display_room_answers(room_id, match_percent)
+                self.info("سيتم إجراء فحص شامل للتأكد...")
+            else:
+                self.warning("الغرفة غير موجودة في قاعدة البيانات. بدء الفحص الشامل...")
+                
+            # 4. فحص شامل للخدمات الأخرى
+            self.step_title("4️⃣ فحص شامل للخدمات")
+            if web_ports:
+                for port in web_ports[1:]:
+                    self.scan_web(ip, port)
             self.scan_ftp(ip)
             self.scan_smb(ip)
             self.scan_ssh(ip)
             
             # 5. البحث عن الأعلام
             if web_ports:
-                self.log("[4] 🎯 Hunting for flags...")
+                self.step_title("5️⃣ البحث عن الأعلام")
                 self.hunt_flags(ip, web_ports)
                 
             # 6. استخراج المعلومات
-            self.log("[5] 📋 Extracting info from outputs...")
+            self.step_title("6️⃣ استخراج المعلومات من الملفات")
             self.extract_info()
             
-            # 7. عرض الملخص
+            # 7. الملخص النهائي
+            self.step_title("7️⃣ الملخص النهائي")
             self.show_summary()
             
         except Exception as e:
-            self.log(f"❌ Error: {e}")
+            self.log(f"❌ خطأ: {e}")
         finally:
             self.finish_attack()
             
@@ -481,7 +605,7 @@ class GhenaSmartSolver:
 
 def main():
     root = tk.Tk()
-    app = GhenaSmartSolver(root)
+    app = GhenaDetailedSolver(root)
     root.mainloop()
 
 if __name__ == "__main__":
