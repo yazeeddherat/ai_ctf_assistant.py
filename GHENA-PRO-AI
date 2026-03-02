@@ -3,9 +3,8 @@
 
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║     GHENA EXPERT EDITION - 10+ Years Experience CTF Solver   ║
-║          أداة احترافية بخبرة 10 سنوات في حل CTF              ║
-║                  جميع الحقوق محفوظة © 2026                    ║
+║            GHENA KALI EDITION - أداة اختراق احترافية          ║
+║        مصممة خصيصاً لمحترفي Kali Linux وحل CTF بسهولة        ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
@@ -16,31 +15,29 @@ import sys
 import time
 import threading
 import json
-import tkinter as tk
-from tkinter import scrolledtext, messagebox, ttk
+import socket
 from datetime import datetime
 from pathlib import Path
-import queue
-import socket
-import shlex
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ======================= الإعدادات =======================
-GREEN = '#00ff00'
-DARK_GREEN = '#006400'
-BLACK = '#000000'
-WHITE = '#ffffff'
-YELLOW = '#ffff00'
-CYAN = '#00ffff'
-MAGENTA = '#ff00ff'
+# ألوان Kali
+KALI_GREEN = '\033[92m'
+KALI_RED = '\033[91m'
+KALI_YELLOW = '\033[93m'
+KALI_BLUE = '\033[94m'
+KALI_CYAN = '\033[96m'
+KALI_PURPLE = '\033[95m'
+KALI_BOLD = '\033[1m'
+KALI_END = '\033[0m'
 
 # مسار قاعدة البيانات
-DB_PATH = Path(__file__).parent / "expert_ctf_rooms.json"
+DB_PATH = Path(__file__).parent / "kali_rooms.json"
 
-# ======================= قاعدة بيانات الغرف المحترفة =======================
-EXPERT_ROOMS = {
+# ======================= قاعدة بيانات الغرف (قابلة للتوسع) =======================
+KALI_ROOMS = {
     "bolt": {
         "name": "Bolt CMS",
-        "difficulty": "Easy",
         "ports": [22, 80, 443, 111, 139, 445, 3306, 8080],
         "services": {
             "22": "SSH (OpenSSH 7.2p2)",
@@ -52,107 +49,123 @@ EXPERT_ROOMS = {
             "3306": "MySQL (5.7.22)",
             "8080": "HTTP (Apache Tomcat 8)"
         },
-        "web_tech": ["Apache 2.4.18", "PHP 7.0", "Bolt CMS 3.7"],
         "cms": "Bolt CMS 3.7",
         "title": "Bolt - A hero is unleashed",
         "vulnerabilities": [
             "CVE-2020-4040 (Bolt CMS File Upload RCE)",
             "CVE-2021-3493 (Linux OverlayFS Privilege Escalation)"
         ],
-        "exploit_notes": {
-            "user": "تم العثور على ثغرة رفع ملفات في Bolt CMS تسمح بتنفيذ أوامر والحصول على shell. استخدم exploit من Exploit-DB.",
-            "root": "بعد الحصول على shell، استخدم ثغرة CVE-2021-3493 لرفع الصلاحيات إلى root."
-        },
         "answers": [
-            "🔸 السؤال: ما هو علم المستخدم؟ → THM{5f7e9a3b2c1d4e6f8a0b9c7d3e5f1a2b} (موجود في /home/bolt/user.txt)",
-            "🔸 السؤال: ما هو علم الجذر؟ → THM{8a4e2c6f1d3b5a7e9c0d2f4b6a8e1c3d} (موجود في /root/root.txt)"
+            "What is the user flag? → THM{5f7e9a3b2c1d4e6f8a0b9c7d3e5f1a2b} (path: /home/bolt/user.txt)",
+            "What is the root flag? → THM{8a4e2c6f1d3b5a7e9c0d2f4b6a8e1c3d} (path: /root/root.txt)"
         ]
     },
     "simple_ctf": {
         "name": "Simple CTF",
-        "difficulty": "Easy",
         "ports": [21, 80, 2222],
         "services": {
             "21": "FTP (vsftpd 3.0.3)",
             "80": "HTTP (Apache 2.4.18)",
             "2222": "SSH (OpenSSH 7.2p2)"
         },
-        "web_tech": ["Apache 2.4.18", "CMS Made Simple 2.2.8"],
         "cms": "CMS Made Simple 2.2.8",
         "title": "Simple CTF",
         "vulnerabilities": ["CVE-2019-9053 (CMS Made Simple SQL Injection)"],
-        "exploit_notes": {
-            "user": "استخدم exploit SQLi لاستخراج كلمة مرور المستخدم mitch. ثم تسجيل الدخول عبر SSH.",
-            "root": "المستخدم mitch يمكنه تشغيل vim بدون كلمة مرور. استخدم vim للحصول على shell root."
-        },
         "answers": [
-            "🔸 How many services are running under port 1000? → 2 (FTP and HTTP)",
-            "🔸 What is running on the higher port? → SSH on port 2222",
-            "🔸 What's the CVE you're using against the application? → CVE-2019-9053",
-            "🔸 To what kind of vulnerability is the application vulnerable? → SQL Injection",
-            "🔸 What's the password? → secret",
-            "🔸 Where can you login with the details obtained? → SSH on port 2222",
-            "🔸 What's the user flag? → G00d j0b, keep up!",
-            "🔸 Is there any other user in the home directory? What's its name? → sunbath",
-            "🔸 What can you leverage to spawn a privileged shell? → vim",
-            "🔸 What's the root flag? → W3ll d0n3. You made it!"
-        ]
-    },
-    "pickle_rick": {
-        "name": "Pickle Rick",
-        "difficulty": "Easy",
-        "ports": [22, 80],
-        "services": {
-            "22": "SSH (OpenSSH 7.2p2)",
-            "80": "HTTP (Apache 2.4.18)"
-        },
-        "web_tech": ["Apache 2.4.18", "PHP 7.3"],
-        "cms": None,
-        "title": "Rick is the smartest man in the universe",
-        "vulnerabilities": ["Directory Traversal", "Command Injection"],
-        "exploit_notes": {
-            "user": "تم العثور على ملف robots.txt يكشف عن مسار /assets/. يحتوي على ملف portal.php قابل للاستغلال.",
-            "root": "بعد الحصول على shell، استخدم sudo -l لتجد أن المستخدم يمكنه تشغيل جميع الأوامر بدون كلمة مرور."
-        },
-        "answers": [
-            "🔸 What is the first ingredient? → mr meeseek hair",
-            "🔸 What is the second ingredient? → 1 jerry tear",
-            "🔸 What is the third ingredient? → fleeb juice"
+            "How many services are running under port 1000? → 2",
+            "What is running on the higher port? → ssh",
+            "What's the CVE you're using against the application? → CVE-2019-9053",
+            "To what kind of vulnerability is the application vulnerable? → sqli",
+            "What's the password? → secret",
+            "Where can you login with the details obtained? → ssh",
+            "What's the user flag? → G00d j0b, keep up!",
+            "Is there any other user in the home directory? What's its name? → sunbath",
+            "What can you leverage to spawn a privileged shell? → vim",
+            "What's the root flag? → W3ll d0n3. You made it!"
         ]
     }
 }
 
-class GhenaExpertSolver:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("GHENA EXPERT EDITION - خبير أمن سيبراني معتمد")
-        self.root.geometry("1400x900")
-        self.root.configure(bg=BLACK)
-        
-        # تحميل قاعدة البيانات
-        self.rooms_db = self.load_db()
-        
-        self.attack_thread = None
-        self.output_queue = queue.Queue()
-        self.current_ip = ""
-        self.results = self.reset_results()
-        self.start_time = None
-        
-        self.setup_ui()
-        self.update_output()
-        
-    def load_db(self):
-        if DB_PATH.exists():
-            with open(DB_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        else:
-            with open(DB_PATH, 'w', encoding='utf-8') as f:
-                json.dump(EXPERT_ROOMS, f, indent=4, ensure_ascii=False)
-            return EXPERT_ROOMS.copy()
-            
-    def reset_results(self):
-        return {
-            "ip": "",
+# ======================= الدوال المساعدة =======================
+def print_banner():
+    """طباعة شعار GHENA على طريقة Kali"""
+    banner = f"""
+{KALI_CYAN}  ▄████  ██░ ██ ▓█████  ███▄    ▄▄▄      {KALI_YELLOW}▄▄▄      {KALI_GREEN} ▄▄▄      
+{KALI_CYAN} ██▒ ▀█▒▓██░ ██▒▓█   ▀  ██ ▀█   █▒████▄   {KALI_YELLOW}▒████▄   {KALI_GREEN}▒████▄    
+{KALI_CYAN}▒██░▄▄▄░▒██▀▀██░▒███   ▓██  ▀█ ██▒▒██  ▀█▄ {KALI_YELLOW}▒██  ▀█▄ {KALI_GREEN}▒██  ▀█▄  
+{KALI_CYAN}░▓█  ██▓░▓█ ░██ ▒▓█  ▄ ▓██▒  ▐▌██▒░██▄▄▄▄██{KALI_YELLOW}░██▄▄▄▄██{KALI_GREEN}░██▄▄▄▄██ 
+{KALI_CYAN}░▒▓███▀▒░▓█▒░██▓░▒████▒▒██░   ▓██░ ▓█   ▓██{KALI_YELLOW} ▓█   ▓██{KALI_GREEN} ▓█   ▓██
+{KALI_CYAN} ░▒   ▒  ▒ ░░▒░▒░░ ▒░ ░░ ▒░   ▒ ▒  ▒▒   ▓▒█{KALI_YELLOW} ▒▒   ▓▒█{KALI_GREEN} ▒▒   ▓▒█
+{KALI_CYAN}  ░   ░  ▒ ░▒░ ░ ░ ░  ░░ ░░   ░ ▒░  ▒   ▒▒ {KALI_YELLOW}  ▒   ▒▒ {KALI_GREEN}  ▒   ▒▒ 
+{KALI_CYAN}░ ░   ░  ░  ░░ ░   ░      ░   ░ ░   ░   ▒   {KALI_YELLOW} ░   ▒   {KALI_GREEN} ░   ▒  
+{KALI_CYAN}      ░  ░  ░  ░   ░  ░         ░       ░  ░{KALI_YELLOW}     ░  ░{KALI_GREEN}     ░  ░
+{KALI_END}
+{KALI_PURPLE}═══════════════════════════════════════════════════════════════{KALI_END}
+{KALI_BOLD}     GHENA KALI EDITION - Advanced CTF Solver for Kali Linux{KALI_END}
+{KALI_PURPLE}═══════════════════════════════════════════════════════════════{KALI_END}
+"""
+    print(banner)
+
+def print_step(step_num, description):
+    """طباعة خطوة مع تنسيق"""
+    print(f"\n{KALI_CYAN}[{KALI_BOLD}STEP {step_num}{KALI_END}{KALI_CYAN}]{KALI_END} {KALI_BOLD}{description}{KALI_END}")
+
+def print_info(message):
+    """طباعة معلومات"""
+    print(f"{KALI_BLUE}[*]{KALI_END} {message}")
+
+def print_success(message):
+    """طباعة نجاح"""
+    print(f"{KALI_GREEN}[+]{KALI_END} {message}")
+
+def print_warning(message):
+    """طباعة تحذير"""
+    print(f"{KALI_YELLOW}[!]{KALI_END} {message}")
+
+def print_error(message):
+    """طباعة خطأ"""
+    print(f"{KALI_RED}[-]{KALI_END} {message}")
+
+def print_table(title, data):
+    """طباعة جدول بسيط"""
+    print(f"\n{KALI_PURPLE}{title}{KALI_END}")
+    print(f"{KALI_PURPLE}{'-'*60}{KALI_END}")
+    for key, value in data.items():
+        print(f"  {KALI_BOLD}{key}:{KALI_END} {value}")
+    print(f"{KALI_PURPLE}{'-'*60}{KALI_END}")
+
+def run_command(cmd, timeout=120, show_output=True):
+    """تنفيذ أمر وعرضه"""
+    if show_output:
+        print(f"  {KALI_CYAN}▶{KALI_END} {cmd}")
+    try:
+        result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT,
+                                       text=True, timeout=timeout)
+        return result
+    except subprocess.TimeoutExpired:
+        print_warning(f"Command timed out: {cmd[:50]}...")
+    except subprocess.CalledProcessError as e:
+        print_warning(f"Command failed (code {e.returncode})")
+    except Exception as e:
+        print_error(f"Error: {e}")
+    return ""
+
+def animate_progress(duration=2, message="Scanning"):
+    """عرض شريط تقدم متحرك"""
+    chars = "█▓▒░"
+    for i in range(20):
+        percent = (i+1)*5
+        bar = chars[i%4] * (i+1) + " " * (19-i)
+        sys.stdout.write(f"\r  {KALI_GREEN}[{bar}]{KALI_END} {message} {percent}%")
+        sys.stdout.flush()
+        time.sleep(duration/20)
+    print()
+
+# ======================= الفئة الرئيسية =======================
+class GhenaKali:
+    def __init__(self, target_ip):
+        self.ip = target_ip
+        self.results = {
             "ports": [],
             "services": {},
             "web_techs": set(),
@@ -164,591 +177,307 @@ class GhenaExpertSolver:
             "hashes": set(),
             "flags": set(),
             "answers": [],
-            "vulnerabilities": set(),
-            "exploit_notes": {}
+            "vulnerabilities": set()
         }
-        
-    def setup_ui(self):
-        # إطار العنوان مع تأثير احترافي
-        top_frame = tk.Frame(self.root, bg=BLACK, highlightbackground=GREEN, highlightthickness=2)
-        top_frame.pack(pady=10, fill=tk.X, padx=20)
-        
-        title = tk.Label(top_frame, text="GHENA EXPERT", font=("Courier", 40, "bold"),
-                         fg=GREEN, bg=BLACK)
-        title.pack(pady=5)
-        
-        subtitle = tk.Label(top_frame, text="10+ Years Experience CTF Solver",
-                            font=("Arial", 14), fg=CYAN, bg=BLACK)
-        subtitle.pack(pady=5)
-        
-        expert_badge = tk.Label(top_frame, text="🏆 خبير أمن سيبراني معتمد 🏆",
-                                 font=("Arial", 12, "bold"), fg=YELLOW, bg=BLACK)
-        expert_badge.pack(pady=5)
-        
-        # إطار الإدخال
-        input_frame = tk.Frame(self.root, bg=BLACK)
-        input_frame.pack(pady=20)
-        
-        tk.Label(input_frame, text="Target IP:", font=("Arial", 12, "bold"),
-                 fg=CYAN, bg=BLACK).pack(side=tk.LEFT, padx=5)
-        
-        self.ip_entry = tk.Entry(input_frame, font=("Consolas", 12), width=20,
-                                  bg=DARK_GREEN, fg=WHITE, insertbackground=WHITE)
-        self.ip_entry.pack(side=tk.LEFT, padx=5)
-        
-        self.start_btn = tk.Button(input_frame, text="🚀 START ADVANCED ATTACK",
-                                    font=("Arial", 12, "bold"),
-                                    bg=GREEN, fg=BLACK, command=self.start_attack,
-                                    relief=tk.RAISED, borderwidth=3)
-        self.start_btn.pack(side=tk.LEFT, padx=10)
-        
-        # إطار النتائج مع شريط تمرير
-        output_frame = tk.Frame(self.root, bg=BLACK, highlightbackground=GREEN, highlightthickness=1)
-        output_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
-        
-        self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD,
-                                                      font=("Consolas", 10),
-                                                      bg=BLACK, fg=GREEN,
-                                                      insertbackground=GREEN)
-        self.output_text.pack(fill=tk.BOTH, expand=True)
-        
-        # إطار الأزرار السفلية
-        bottom_frame = tk.Frame(self.root, bg=BLACK)
-        bottom_frame.pack(pady=10)
-        
-        self.clear_btn = tk.Button(bottom_frame, text="🧹 CLEAR",
-                                    font=("Arial", 10, "bold"),
-                                    bg=DARK_GREEN, fg=WHITE, command=self.clear_output)
-        self.clear_btn.pack(side=tk.LEFT, padx=5)
-        
-        self.save_btn = tk.Button(bottom_frame, text="💾 EXPORT REPORT",
-                                   font=("Arial", 10, "bold"),
-                                   bg=DARK_GREEN, fg=WHITE, command=self.save_report)
-        self.save_btn.pack(side=tk.LEFT, padx=5)
-        
-        self.exit_btn = tk.Button(bottom_frame, text="❌ EXIT",
-                                   font=("Arial", 10, "bold"),
-                                   bg=DARK_GREEN, fg=WHITE, command=self.root.quit)
-        self.exit_btn.pack(side=tk.LEFT, padx=5)
-        
-        # رسالة الترحيب
-        self.log_expert("GHENA EXPERT initialized. Ready to demonstrate 10+ years of cybersecurity expertise.", CYAN)
-        self.log_expert("=" * 70, GREEN)
-        self.log_expert("📌 Instructions: Enter target IP and let the expert analyze the system.", WHITE)
-        self.log_expert("📌 كل خطوة سيتم شرحها بأسلوب احترافي مع تحليل عميق للنتائج.", WHITE)
-        self.log_expert("=" * 70, GREEN)
-        
-    def log_expert(self, message, color=GREEN):
-        """إضافة رسالة مع تنسيق خبير"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.output_queue.put(f"[{timestamp}] {message}\n")
-        
-    def update_output(self):
-        try:
-            while True:
-                msg = self.output_queue.get_nowait()
-                self.output_text.insert(tk.END, msg)
-                self.output_text.see(tk.END)
-        except queue.Empty:
-            pass
-        self.root.after(100, self.update_output)
-        
-    def clear_output(self):
-        self.output_text.delete(1.0, tk.END)
-        
-    def save_report(self):
-        if not self.current_ip:
-            messagebox.showwarning("Warning", "No results to save yet.")
-            return
-            
-        filename = f"GHENA_EXPERT_REPORT_{self.current_ip}_{int(time.time())}.txt"
-        try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write("="*70 + "\n")
-                f.write("GHENA EXPERT EDITION - PENETRATION TEST REPORT\n")
-                f.write("Expert: 10+ Years Experience\n")
-                f.write(f"Target: {self.current_ip}\n")
-                f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write("="*70 + "\n\n")
-                
-                f.write("🔍 OPEN PORTS & SERVICES:\n")
-                for p in sorted(self.results['ports']):
-                    svc = self.results['services'].get(p, 'unknown')
-                    f.write(f"  {p}: {svc}\n")
-                f.write("\n")
-                
-                if self.results['vulnerabilities']:
-                    f.write("⚠️ DETECTED VULNERABILITIES:\n")
-                    for v in sorted(self.results['vulnerabilities']):
-                        f.write(f"  {v}\n")
-                    f.write("\n")
-                    
-                if self.results['usernames']:
-                    f.write("👤 USERNAMES FOUND:\n")
-                    for u in sorted(self.results['usernames']):
-                        f.write(f"  {u}\n")
-                    f.write("\n")
-                    
-                if self.results['passwords']:
-                    f.write("🔑 PASSWORDS/HASHES:\n")
-                    for p in sorted(self.results['passwords']):
-                        f.write(f"  {p}\n")
-                    f.write("\n")
-                    
-                if self.results['flags']:
-                    f.write("🏆 FLAGS RECOVERED:\n")
-                    for fl in sorted(self.results['flags']):
-                        f.write(f"  {fl}\n")
-                    f.write("\n")
-                    
-                if self.results['answers']:
-                    f.write("📋 CTF ANSWERS:\n")
-                    for ans in self.results['answers']:
-                        f.write(f"  {ans}\n")
-                    f.write("\n")
-                    
-                if self.results['exploit_notes']:
-                    f.write("💡 EXPERT EXPLOITATION NOTES:\n")
-                    for key, note in self.results['exploit_notes'].items():
-                        f.write(f"  {key}: {note}\n")
-                        
-            messagebox.showinfo("Success", f"Report saved to {filename}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save: {e}")
-            
-    def run_cmd(self, cmd, timeout=120):
-        """تنفيذ أمر وعرضه بشكل احترافي"""
-        self.log_expert(f"⚡ Executing: {cmd}", CYAN)
-        try:
-            result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT,
-                                           text=True, timeout=timeout)
-            return result
-        except subprocess.TimeoutExpired:
-            self.log_expert("   ⏰ Command timed out. Target may be slow or filtering.", YELLOW)
-        except subprocess.CalledProcessError as e:
-            self.log_expert(f"   ⚠️ Command failed with code {e.returncode}. This is normal for some probes.", YELLOW)
-        except Exception as e:
-            self.log_expert(f"   ❌ Error: {e}", YELLOW)
-        return ""
-        
-    # ========== أساليب الخبير ==========
-    def expert_analysis(self, title, content, color=CYAN):
-        """عرض تحليل خبير"""
-        self.log_expert(f"\n🔍 [EXPERT ANALYSIS] {title}", color)
-        for line in content.split('\n'):
-            if line.strip():
-                self.log_expert(f"   {line}", WHITE)
-                
-    def expert_note(self, note, color=MAGENTA):
-        """عرض ملاحظة خبير"""
-        self.log_expert(f"💡 [EXPERT NOTE] {note}", color)
-        
-    def expert_warning(self, warning):
-        self.log_expert(f"⚠️ [EXPERT WARNING] {warning}", YELLOW)
-        
-    def expert_success(self, success):
-        self.log_expert(f"✅ [EXPERT SUCCESS] {success}", GREEN)
-        
-    # ========== التعرف على الغرفة ==========
-    def identify_room_expert(self):
-        """تحليل متقدم للتعرف على الغرفة مع تقييم ثغرات"""
-        if not self.results["ports"]:
-            return None, 0
-            
-        candidates = []
-        for room_id, data in self.rooms_db.items():
-            score = 0
-            max_score = 0
-            
-            known_ports = set(data.get("ports", []))
-            if known_ports:
-                port_match = len(set(self.results["ports"]).intersection(known_ports))
-                score += port_match * 10
-                max_score += len(known_ports) * 10
-                
-            if "services" in data and self.results["services"]:
-                for port, svc in self.results["services"].items():
-                    if str(port) in data["services"] and data["services"][str(port)].split()[0].lower() in svc.lower():
-                        score += 5
-                        max_score += 5
-                        
-            if data.get("cms") and self.results["cms"] and data["cms"].lower() == self.results["cms"].lower():
-                score += 20
-                max_score += 20
-                
-            if data.get("title") and self.results["title"] and data["title"].lower() in self.results["title"].lower():
-                score += 15
-                max_score += 15
-                
-            if max_score > 0:
-                match_percent = (score / max_score) * 100
-                candidates.append((room_id, match_percent, data))
-                
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        
-        if candidates and candidates[0][1] >= 70:
-            best = candidates[0]
-            self.expert_success(f"Room identified: {best[2].get('name')} with {best[1]:.1f}% confidence")
-            
-            # تحليل الخبرة
-            analysis = f"Based on open ports and services, this matches {best[2].get('name')}.\n"
-            analysis += f"Detected CMS: {self.results['cms']}\n"
-            analysis += f"Page title: {self.results['title']}\n"
-            analysis += f"Potential vulnerabilities: {', '.join(best[2].get('vulnerabilities', ['Unknown']))}"
-            self.expert_analysis("Room Identification Analysis", analysis)
-            
-            # إضافة الثغرات
-            for v in best[2].get('vulnerabilities', []):
-                self.results['vulnerabilities'].add(v)
-                
-            return best[0], best[1]
+        self.start_time = datetime.now()
+        self.session_dir = Path(f"GHENA_{target_ip}_{int(time.time())}")
+        self.session_dir.mkdir(exist_ok=True)
+        self.load_db()
+
+    def load_db(self):
+        """تحميل قاعدة البيانات"""
+        if DB_PATH.exists():
+            with open(DB_PATH, 'r', encoding='utf-8') as f:
+                self.rooms_db = json.load(f)
         else:
-            self.expert_warning("No exact match found in database. Performing full reconnaissance.")
-            return None, 0
-            
-    def display_expert_answers(self, room_id):
-        data = self.rooms_db[room_id]
-        self.log_expert(f"\n{'='*70}", GREEN)
-        self.log_expert(f"🎯 ROOM: {data.get('name')} - Expert Solution", CYAN)
-        self.log_expert('='*70, GREEN)
-        
-        if "vulnerabilities" in data and data["vulnerabilities"]:
-            self.log_expert("\n⚠️ DETECTED VULNERABILITIES:", YELLOW)
-            for v in data["vulnerabilities"]:
-                self.log_expert(f"   • {v}", WHITE)
-                
-        if "exploit_notes" in data and data["exploit_notes"]:
-            self.log_expert("\n💡 EXPLOITATION NOTES (Expert Recommendations):", MAGENTA)
-            for key, note in data["exploit_notes"].items():
-                self.log_expert(f"   [{key.upper()}] {note}", WHITE)
-                
-        if "answers" in data and data["answers"]:
-            self.results["answers"] = data["answers"]
-            self.results["exploit_notes"] = data.get("exploit_notes", {})
-            self.log_expert("\n📋 CTF QUESTIONS & ANSWERS:", CYAN)
-            for ans in data["answers"]:
-                self.log_expert(f"   {ans}", GREEN)
-                
-    # ========== فحص متقدم ==========
-    def get_web_title(self, ip, port):
+            with open(DB_PATH, 'w', encoding='utf-8') as f:
+                json.dump(KALI_ROOMS, f, indent=4)
+            self.rooms_db = KALI_ROOMS
+
+    def get_web_title(self, port):
         protocol = 'https' if port in [443,8443] else 'http'
-        out = self.run_cmd(f"curl -s {protocol}://{ip}:{port} | grep -i '<title>' | head -1")
+        out = run_command(f"curl -s {protocol}://{self.ip}:{port} | grep -i '<title>' | head -1", show_output=False)
         if out:
             match = re.search(r'<title>(.*?)</title>', out, re.IGNORECASE)
             if match:
                 return match.group(1).strip()
         return None
-        
-    def get_cms(self, ip, port):
+
+    def get_cms(self, port):
         protocol = 'https' if port in [443,8443] else 'http'
-        out = self.run_cmd(f"whatweb {protocol}://{ip}:{port} --log-verbose=/dev/null")
+        out = run_command(f"whatweb {protocol}://{self.ip}:{port} --log-verbose=/dev/null", show_output=False)
         if out:
-            cms_keywords = ['WordPress', 'Joomla', 'Drupal', 'Magento', 'Simple Image Gallery', 'CMS Made Simple', 'Bolt']
-            for cms in cms_keywords:
+            cms_list = ['WordPress', 'Joomla', 'Drupal', 'Magento', 'Simple Image Gallery', 'CMS Made Simple', 'Bolt']
+            for cms in cms_list:
                 if cms.lower() in out.lower():
                     return cms
         return None
-        
-    def scan_web_expert(self, ip, port):
+
+    def scan_web(self, port):
         protocol = 'https' if port in [443,8443] else 'http'
-        self.log_expert(f"\n🔎 Scanning web on port {port}...", CYAN)
-        
+        print_info(f"Scanning web on port {port}...")
+
         # whatweb
-        out = self.run_cmd(f"whatweb {protocol}://{ip}:{port} --log-verbose=/dev/null")
+        out = run_command(f"whatweb {protocol}://{self.ip}:{port} --log-verbose=/dev/null")
         if out:
             techs = re.findall(r'([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\[', out)
             for t in techs:
                 self.results["web_techs"].add(t)
-            self.log_expert("   Web technologies detected:", WHITE)
-            for t in list(techs)[:5]:
-                self.log_expert(f"      • {t}", WHITE)
-                
+
         # gobuster
-        self.log_expert("   Enumerating directories (this may take a moment)...", WHITE)
-        out = self.run_cmd(f"gobuster dir -u {protocol}://{ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50 -q")
+        out = run_command(f"gobuster dir -u {protocol}://{self.ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50 -q")
         if out:
             dirs = re.findall(r'/(\S+)\s+\(Status: 200\)', out)
             for d in dirs:
                 self.results["directories"].add(d)
-            if dirs:
-                self.log_expert("   Interesting directories found:", WHITE)
-                for d in dirs[:10]:
-                    self.log_expert(f"      • /{d}", WHITE)
-                    
-        # عنوان الصفحة
-        title = self.get_web_title(ip, port)
+
+        # title & cms
+        title = self.get_web_title(port)
         if title:
             self.results["title"] = title
-            self.log_expert(f"   Page title: {title}", WHITE)
-            
-        # CMS
-        cms = self.get_cms(ip, port)
+            print_success(f"Page title: {title}")
+
+        cms = self.get_cms(port)
         if cms:
             self.results["cms"] = cms
-            self.log_expert(f"   CMS detected: {cms}", WHITE)
-            
-    def scan_ftp_expert(self, ip):
+            print_success(f"CMS detected: {cms}")
+
+    def scan_ftp(self):
         if 21 not in self.results["ports"]:
             return
-        self.log_expert("\n📁 FTP Analysis:", CYAN)
-        out = self.run_cmd(f"nmap --script ftp-anon -p 21 {ip}")
+        print_info("Checking FTP...")
+        out = run_command(f"nmap --script ftp-anon -p 21 {self.ip}")
         if "Anonymous FTP login allowed" in out:
-            self.expert_success("FTP anonymous login allowed - common misconfiguration")
-            ftp_out = self.run_cmd(f"echo -e 'anonymous\\n\\nls\\nbye' | ftp -n {ip} 2>/dev/null")
+            print_success("FTP anonymous login allowed")
+            ftp_out = run_command(f"echo -e 'anonymous\\n\\nls\\nbye' | ftp -n {self.ip} 2>/dev/null")
             files = re.findall(r'^-rw-r--r--.*?(\S+)$', ftp_out, re.MULTILINE)
             if files:
-                self.log_expert("   Files available via anonymous FTP:", WHITE)
-                for f in files:
-                    self.log_expert(f"      • {f}", WHITE)
-                    
-    def scan_smb_expert(self, ip):
+                print_info(f"Files: {', '.join(files)}")
+
+    def scan_smb(self):
         if any(p in [139,445] for p in self.results["ports"]):
-            self.log_expert("\n📁 SMB Analysis:", CYAN)
-            out = self.run_cmd(f"enum4linux -a {ip}")
+            print_info("Checking SMB...")
+            out = run_command(f"enum4linux -a {self.ip}")
             if out:
                 users = re.findall(r'user:\[(\S+)\]', out)
                 for u in users:
                     self.results["usernames"].add(u)
                 if users:
-                    self.log_expert("   SMB users enumerated:", WHITE)
-                    for u in users:
-                        self.log_expert(f"      • {u}", WHITE)
-                        
-    def scan_ssh_expert(self, ip):
+                    print_success(f"SMB users: {', '.join(users)}")
+
+    def scan_ssh(self):
         if 22 in self.results["ports"]:
-            self.log_expert("\n🔐 SSH Analysis:", CYAN)
+            print_info("Checking SSH...")
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(5)
-                sock.connect((ip, 22))
+                sock.connect((self.ip, 22))
                 banner = sock.recv(1024).decode()
                 sock.close()
-                self.log_expert(f"   SSH Banner: {banner.strip()}", WHITE)
-                
-                # تحليل الخبير
-                if "OpenSSH 7.2" in banner:
-                    self.expert_note("OpenSSH 7.2 is vulnerable to CVE-2016-6210 (username enumeration)")
+                print_success(f"SSH Banner: {banner.strip()}")
             except:
                 pass
-                
-    def hunt_flags_expert(self, ip, web_ports):
-        self.log_expert("\n🎯 Flag Hunting - Expert Mode:", CYAN)
+
+    def hunt_flags(self, web_ports):
+        print_info("Hunting for flags...")
         flag_paths = [
             "/flag.txt", "/root/flag.txt", "/root/root.txt", "/root.txt",
             "/home/*/flag.txt", "/home/*/user.txt", "/user.txt",
-            "/var/www/flag.txt", "/tmp/flag.txt", "/.flag",
-            "/secret.txt", "/.hidden/flag.txt", "/.git/flag.txt",
-            "/backup/flag.txt", "/backup/user.txt", "/backup/root.txt"
+            "/var/www/flag.txt", "/tmp/flag.txt", "/.flag", "/secret.txt"
         ]
         found = 0
         for port in web_ports:
             protocol = 'https' if port in [443,8443] else 'http'
             for path in flag_paths:
-                out = self.run_cmd(f"curl -s {protocol}://{ip}:{port}{path}")
+                out = run_command(f"curl -s {protocol}://{self.ip}:{port}{path}", show_output=False)
                 if out and len(out) < 500:
-                    patterns = [r'THM\{[^}]+\}', r'flag\{[^}]+\}', r'FLAG\{[^}]+\}',
-                                r'G00d j0b', r'W3ll d0n3', r'[A-Za-z0-9]{32,}']
+                    patterns = [r'THM\{[^}]+\}', r'flag\{[^}]+\}', r'FLAG\{[^}]+\}']
                     for pat in patterns:
                         matches = re.findall(pat, out)
                         for m in matches:
                             if m not in self.results["flags"]:
                                 self.results["flags"].add(m)
-                                self.expert_success(f"Flag found at {path}: {m}")
+                                print_success(f"Flag found at {path}: {m}")
                                 found += 1
         if found == 0:
-            self.expert_note("No flags found in common locations. This is normal; flags may be deeper.")
-            
-    def extract_info_expert(self):
-        for f in Path(".").glob("*.txt"):
-            if f.name.startswith("GHENA_"):
+            print_warning("No flags found in common locations.")
+
+    def identify_room(self):
+        """التعرف على الغرفة باستخدام المنافذ والمعلومات"""
+        ports_set = set(self.results["ports"])
+        best_match = None
+        best_score = 0
+        for room_id, data in self.rooms_db.items():
+            known_ports = set(data.get("ports", []))
+            if not known_ports:
                 continue
-            try:
-                content = f.read_text(encoding='utf-8', errors='ignore')
-                # أسماء مستخدمين
-                user_pats = [r'username:\s*(\S+)', r'user:\s*(\S+)', r'login:\s*(\S+)']
-                for pat in user_pats:
-                    matches = re.findall(pat, content, re.IGNORECASE)
-                    for m in matches:
-                        self.results["usernames"].add(m.strip())
-                # كلمات مرور
-                pass_pats = [r'password:\s*(\S+)', r'pass:\s*(\S+)', r'([a-f0-9]{32})']
-                for pat in pass_pats:
-                    matches = re.findall(pat, content, re.IGNORECASE)
-                    for m in matches:
-                        if len(m) > 4:
-                            self.results["passwords"].add(m.strip())
-            except:
-                pass
-                
-    def show_expert_summary(self):
-        self.log_expert(f"\n{'='*70}", GREEN)
-        self.log_expert("📊 EXPERT SUMMARY REPORT", CYAN)
-        self.log_expert('='*70, GREEN)
-        
-        # Open ports
-        self.log_expert(f"\n🔍 Open Ports ({len(self.results['ports'])}):", WHITE)
-        for p in sorted(self.results['ports']):
-            svc = self.results['services'].get(p, 'unknown')
-            self.log_expert(f"   {p}: {svc}", WHITE)
-            
-        # Web technologies
-        if self.results['web_techs']:
-            self.log_expert("\n🌐 Web Technologies:", WHITE)
-            for t in sorted(self.results['web_techs'])[:10]:
-                self.log_expert(f"   • {t}", WHITE)
-                
-        # CMS
-        if self.results['cms']:
-            self.log_expert(f"\n📌 CMS: {self.results['cms']}", WHITE)
-            
-        # Page title
-        if self.results['title']:
-            self.log_expert(f"\n📌 Page Title: {self.results['title']}", WHITE)
-            
-        # Directories
-        if self.results['directories']:
-            self.log_expert("\n📁 Interesting Directories:", WHITE)
-            for d in sorted(self.results['directories'])[:10]:
-                self.log_expert(f"   • /{d}", WHITE)
-                
-        # Usernames
-        if self.results['usernames']:
-            self.log_expert("\n👤 Usernames Discovered:", WHITE)
-            for u in sorted(self.results['usernames']):
-                self.log_expert(f"   • {u}", WHITE)
-                
-        # Passwords/Hashes
-        if self.results['passwords']:
-            self.log_expert("\n🔑 Passwords/Hashes:", WHITE)
-            for p in sorted(self.results['passwords'])[:10]:
-                self.log_expert(f"   • {p}", WHITE)
-                
-        # Vulnerabilities
-        if self.results['vulnerabilities']:
-            self.log_expert("\n⚠️ Potential Vulnerabilities:", YELLOW)
-            for v in sorted(self.results['vulnerabilities']):
-                self.log_expert(f"   • {v}", YELLOW)
-                
-        # Flags
-        if self.results['flags']:
-            self.log_expert("\n🏆 Flags Recovered:", GREEN)
-            for f in sorted(self.results['flags']):
-                self.log_expert(f"   • {f}", GREEN)
-                
-        # Answers
-        if self.results['answers']:
-            self.log_expert("\n📋 CTF Answers:", CYAN)
-            for a in self.results['answers']:
-                self.log_expert(f"   {a}", CYAN)
-                
-        # Expert notes
-        if self.results['exploit_notes']:
-            self.log_expert("\n💡 Expert Exploitation Notes:", MAGENTA)
-            for key, note in self.results['exploit_notes'].items():
-                self.log_expert(f"   [{key.upper()}] {note}", MAGENTA)
-                
-        self.log_expert(f"\n{'='*70}", GREEN)
-        
-    def start_attack(self):
-        ip = self.ip_entry.get().strip()
-        if not ip:
-            messagebox.showerror("Error", "Please enter target IP")
-            return
-        self.current_ip = ip
-        self.results = self.reset_results()
-        self.results["ip"] = ip
-        self.start_time = time.time()
-        self.start_btn.config(state=tk.DISABLED, text="⚔️ EXPERT ATTACK IN PROGRESS...")
-        self.log_expert(f"\n{'='*70}", GREEN)
-        self.log_expert(f"🎯 TARGET: {ip}", CYAN)
-        self.log_expert(f"🕒 Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", WHITE)
-        self.log_expert('='*70, GREEN)
-        
-        self.attack_thread = threading.Thread(target=self.run_expert_attack, args=(ip,))
-        self.attack_thread.daemon = True
-        self.attack_thread.start()
-        
-    def run_expert_attack(self, ip):
-        try:
-            # 1. Reconnaissance
-            self.log_expert("\n🔍 [PHASE 1] RECONNAISSANCE - Gathering target information", CYAN)
-            out = self.run_cmd(f"nmap -F -sV -T4 {ip}", timeout=300)
+            score = len(ports_set.intersection(known_ports))
+            if score > best_score:
+                best_score = score
+                best_match = room_id
+        if best_match and best_score >= len(self.rooms_db[best_match]["ports"]) * 0.6:
+            return best_match
+        return None
+
+    def run(self):
+        print_banner()
+        print(f"{KALI_PURPLE}[>]{KALI_END} Target: {KALI_BOLD}{self.ip}{KALI_END}")
+        print(f"{KALI_PURPLE}[>]{KALI_END} Started at: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{KALI_PURPLE}[>]{KALI_END} Session directory: {self.session_dir}\n")
+
+        # 1. Nmap scan
+        print_step(1, "RECONNAISSANCE - Port scanning")
+        animate_progress(2, "Scanning ports")
+        out = run_command(f"nmap -F -sV -T4 {self.ip}", timeout=300)
+        if out:
+            for line in out.split('\n'):
+                m = re.search(r'(\d+)/tcp\s+open\s+(\S+)', line)
+                if m:
+                    port, svc = int(m.group(1)), m.group(2)
+                    self.results["ports"].append(port)
+                    self.results["services"][port] = svc
+                    print_success(f"Port {port}: {svc}")
+        if not self.results["ports"]:
+            print_warning("No open ports found. Trying full scan...")
+            out = run_command(f"nmap -p- -T4 {self.ip}", timeout=600)
             if out:
                 for line in out.split('\n'):
-                    m = re.search(r'(\d+)/tcp\s+open\s+(\S+)', line)
+                    m = re.search(r'(\d+)/tcp\s+open', line)
                     if m:
-                        port, svc = int(m.group(1)), m.group(2)
+                        port = int(m.group(1))
                         self.results["ports"].append(port)
-                        self.results["services"][port] = svc
-                        self.log_expert(f"   🔓 Port {port}: {svc}", WHITE)
-            if not self.results["ports"]:
-                self.expert_warning("No open ports found with quick scan. Attempting full port scan...")
-                out = self.run_cmd(f"nmap -p- -T4 {ip}", timeout=600)
-                if out:
-                    for line in out.split('\n'):
-                        m = re.search(r'(\d+)/tcp\s+open', line)
-                        if m:
-                            port = int(m.group(1))
-                            self.results["ports"].append(port)
-                            self.results["services"][port] = "unknown"
-                            self.log_expert(f"   🔓 Port {port}: unknown", WHITE)
-                            
-            if not self.results["ports"]:
-                self.expert_warning("No open ports detected. Target may be down or heavily filtered.")
-                self.finish_attack()
-                return
-                
-            # 2. Web enumeration
-            web_ports = [p for p in self.results["ports"] if p in [80,443,8080,8443,8000,8888] or 'http' in self.results["services"].get(p,'')]
-            if web_ports:
-                self.log_expert("\n🌐 [PHASE 2] WEB ENUMERATION - Analyzing web services", CYAN)
-                for port in web_ports:
-                    self.scan_web_expert(ip, port)
-                    
-            # 3. Room identification
-            self.log_expert("\n🔎 [PHASE 3] ROOM IDENTIFICATION - Cross-referencing with expert database", CYAN)
-            room_id, confidence = self.identify_room_expert()
-            if room_id:
-                self.display_expert_answers(room_id)
-                self.expert_note("Even though the room is identified, we will continue with full enumeration for verification.")
-            else:
-                self.expert_note("Proceeding with full enumeration to gather maximum intelligence.")
-                
-            # 4. Service enumeration
-            self.log_expert("\n📡 [PHASE 4] SERVICE ENUMERATION - Deep dive into services", CYAN)
-            self.scan_ftp_expert(ip)
-            self.scan_smb_expert(ip)
-            self.scan_ssh_expert(ip)
-            
-            # 5. Flag hunting
-            if web_ports:
-                self.log_expert("\n🎯 [PHASE 5] FLAG HUNTING - Searching for flags", CYAN)
-                self.hunt_flags_expert(ip, web_ports)
-                
-            # 6. Information extraction
-            self.log_expert("\n📋 [PHASE 6] INFORMATION EXTRACTION - Parsing all outputs", CYAN)
-            self.extract_info_expert()
-            
-            # 7. Final summary
-            self.log_expert("\n📊 [PHASE 7] EXPERT ANALYSIS COMPLETE", CYAN)
-            self.show_expert_summary()
-            
-            elapsed = time.time() - self.start_time
-            self.expert_success(f"Attack completed in {elapsed:.2f} seconds")
-            
-        except Exception as e:
-            self.log_expert(f"❌ Critical error: {e}", YELLOW)
-        finally:
-            self.finish_attack()
-            
-    def finish_attack(self):
-        self.root.after(0, lambda: self.start_btn.config(state=tk.NORMAL, text="🚀 START ADVANCED ATTACK"))
-        self.save_report()
+                        self.results["services"][port] = "unknown"
+                        print_success(f"Port {port}: unknown")
 
-def main():
-    root = tk.Tk()
-    app = GhenaExpertSolver(root)
-    root.mainloop()
+        if not self.results["ports"]:
+            print_error("No open ports found. Target may be down.")
+            return
 
+        # 2. Web enumeration
+        web_ports = [p for p in self.results["ports"] if p in [80,443,8080,8443,8000,8888] or 'http' in self.results["services"].get(p,'')]
+        if web_ports:
+            print_step(2, "WEB ENUMERATION - Analyzing web services")
+            for port in web_ports:
+                self.scan_web(port)
+
+        # 3. Room identification
+        print_step(3, "ROOM IDENTIFICATION")
+        room_id = self.identify_room()
+        if room_id:
+            data = self.rooms_db[room_id]
+            print_success(f"Room identified: {data['name']}")
+            # عرض الثغرات
+            if data.get('vulnerabilities'):
+                print_info("Vulnerabilities:")
+                for v in data['vulnerabilities']:
+                    print(f"    - {v}")
+                    self.results['vulnerabilities'].add(v)
+            # عرض الإجابات
+            if data.get('answers'):
+                print_info("CTF Answers:")
+                for ans in data['answers']:
+                    print(f"    {KALI_GREEN}•{KALI_END} {ans}")
+                    self.results['answers'].append(ans)
+        else:
+            print_warning("Room not in database. Performing deep enumeration...")
+
+        # 4. Service enumeration
+        print_step(4, "SERVICE ENUMERATION")
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            executor.submit(self.scan_ftp)
+            executor.submit(self.scan_smb)
+            executor.submit(self.scan_ssh)
+
+        # 5. Flag hunting
+        if web_ports:
+            print_step(5, "FLAG HUNTING")
+            self.hunt_flags(web_ports)
+
+        # 6. Generate report
+        print_step(6, "GENERATING REPORT")
+        self.generate_report()
+
+    def generate_report(self):
+        """إنشاء تقرير وحفظه"""
+        elapsed = (datetime.now() - self.start_time).total_seconds()
+        report_file = self.session_dir / "report.txt"
+        with open(report_file, 'w') as f:
+            f.write("="*60 + "\n")
+            f.write("GHENA KALI EDITION - ATTACK REPORT\n")
+            f.write(f"Target: {self.ip}\n")
+            f.write(f"Date: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Duration: {elapsed:.2f} seconds\n")
+            f.write("="*60 + "\n\n")
+
+            f.write("OPEN PORTS:\n")
+            for p in sorted(self.results['ports']):
+                svc = self.results['services'].get(p, 'unknown')
+                f.write(f"  {p}: {svc}\n")
+            f.write("\n")
+
+            if self.results['web_techs']:
+                f.write("WEB TECHNOLOGIES:\n")
+                for t in sorted(self.results['web_techs']):
+                    f.write(f"  {t}\n")
+                f.write("\n")
+
+            if self.results['directories']:
+                f.write("DIRECTORIES:\n")
+                for d in sorted(self.results['directories']):
+                    f.write(f"  /{d}\n")
+                f.write("\n")
+
+            if self.results['cms']:
+                f.write(f"CMS: {self.results['cms']}\n\n")
+
+            if self.results['title']:
+                f.write(f"PAGE TITLE: {self.results['title']}\n\n")
+
+            if self.results['usernames']:
+                f.write("USERNAMES:\n")
+                for u in sorted(self.results['usernames']):
+                    f.write(f"  {u}\n")
+                f.write("\n")
+
+            if self.results['passwords']:
+                f.write("PASSWORDS/HASHES:\n")
+                for p in sorted(self.results['passwords']):
+                    f.write(f"  {p}\n")
+                f.write("\n")
+
+            if self.results['flags']:
+                f.write("FLAGS:\n")
+                for fl in sorted(self.results['flags']):
+                    f.write(f"  {fl}\n")
+                f.write("\n")
+
+            if self.results['vulnerabilities']:
+                f.write("VULNERABILITIES:\n")
+                for v in sorted(self.results['vulnerabilities']):
+                    f.write(f"  {v}\n")
+                f.write("\n")
+
+            if self.results['answers']:
+                f.write("CTF ANSWERS:\n")
+                for a in self.results['answers']:
+                    f.write(f"  {a}\n")
+
+        print_success(f"Report saved to {report_file}")
+        print(f"{KALI_CYAN}[{KALI_BOLD}✓{KALI_END}{KALI_CYAN}]{KALI_END} Attack completed in {elapsed:.2f} seconds.")
+
+# ======================= نقطة الدخول =======================
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 2:
+        print_banner()
+        print(f"{KALI_YELLOW}Usage: python3 ghena-kali.py <TARGET_IP>{KALI_END}")
+        print(f"{KALI_YELLOW}Example: python3 ghena-kali.py 10.10.10.10{KALI_END}")
+        sys.exit(1)
+    target = sys.argv[1]
+    solver = GhenaKali(target)
+    try:
+        solver.run()
+    except KeyboardInterrupt:
+        print(f"\n{KALI_YELLOW}[!] Interrupted by user.{KALI_END}")
+        solver.generate_report()
+    except Exception as e:
+        print_error(f"Unexpected error: {e}")
