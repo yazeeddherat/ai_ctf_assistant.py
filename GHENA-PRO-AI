@@ -1,483 +1,261 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-╔═══════════════════════════════════════════════════════════════╗
-║            GHENA KALI EDITION - أداة اختراق احترافية          ║
-║        مصممة خصيصاً لمحترفي Kali Linux وحل CTF بسهولة        ║
-╚═══════════════════════════════════════════════════════════════╝
+THM Interactive Guide
+الاستخدام: python3 thm_guide.py
 """
 
-import subprocess
-import re
-import os
-import sys
-import time
-import threading
-import json
-import socket
-from datetime import datetime
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import subprocess, sys, re, os
 
-# ======================= الإعدادات =======================
-# ألوان Kali
-KALI_GREEN = '\033[92m'
-KALI_RED = '\033[91m'
-KALI_YELLOW = '\033[93m'
-KALI_BLUE = '\033[94m'
-KALI_CYAN = '\033[96m'
-KALI_PURPLE = '\033[95m'
-KALI_BOLD = '\033[1m'
-KALI_END = '\033[0m'
+G = '\033[92m'; R = '\033[91m'; Y = '\033[93m'
+C = '\033[96m'; B = '\033[94m'; P = '\033[95m'
+W = '\033[97m'; BOLD = '\033[1m'; DIM = '\033[2m'; END = '\033[0m'
 
-# مسار قاعدة البيانات
-DB_PATH = Path(__file__).parent / "kali_rooms.json"
+def cls(): os.system('clear')
 
-# ======================= قاعدة بيانات الغرف (قابلة للتوسع) =======================
-KALI_ROOMS = {
-    "bolt": {
-        "name": "Bolt CMS",
-        "ports": [22, 80, 443, 111, 139, 445, 3306, 8080],
-        "services": {
-            "22": "SSH (OpenSSH 7.2p2)",
-            "80": "HTTP (Apache 2.4.18)",
-            "443": "HTTPS (Apache)",
-            "111": "RPCbind",
-            "139": "NetBIOS-SSN",
-            "445": "Samba (4.3.11)",
-            "3306": "MySQL (5.7.22)",
-            "8080": "HTTP (Apache Tomcat 8)"
-        },
-        "cms": "Bolt CMS 3.7",
-        "title": "Bolt - A hero is unleashed",
-        "vulnerabilities": [
-            "CVE-2020-4040 (Bolt CMS File Upload RCE)",
-            "CVE-2021-3493 (Linux OverlayFS Privilege Escalation)"
-        ],
-        "answers": [
-            "What is the user flag? → THM{5f7e9a3b2c1d4e6f8a0b9c7d3e5f1a2b} (path: /home/bolt/user.txt)",
-            "What is the root flag? → THM{8a4e2c6f1d3b5a7e9c0d2f4b6a8e1c3d} (path: /root/root.txt)"
-        ]
-    },
-    "simple_ctf": {
-        "name": "Simple CTF",
-        "ports": [21, 80, 2222],
-        "services": {
-            "21": "FTP (vsftpd 3.0.3)",
-            "80": "HTTP (Apache 2.4.18)",
-            "2222": "SSH (OpenSSH 7.2p2)"
-        },
-        "cms": "CMS Made Simple 2.2.8",
-        "title": "Simple CTF",
-        "vulnerabilities": ["CVE-2019-9053 (CMS Made Simple SQL Injection)"],
-        "answers": [
-            "How many services are running under port 1000? → 2",
-            "What is running on the higher port? → ssh",
-            "What's the CVE you're using against the application? → CVE-2019-9053",
-            "To what kind of vulnerability is the application vulnerable? → sqli",
-            "What's the password? → secret",
-            "Where can you login with the details obtained? → ssh",
-            "What's the user flag? → G00d j0b, keep up!",
-            "Is there any other user in the home directory? What's its name? → sunbath",
-            "What can you leverage to spawn a privileged shell? → vim",
-            "What's the root flag? → W3ll d0n3. You made it!"
-        ]
-    }
-}
+def banner():
+    print(f"""
+{C}╔══════════════════════════════════════════════╗
+║        THM INTERACTIVE GUIDE                ║
+║   أعطيك الأمر ← تشغله ← أحلل ← أكمل       ║
+╚══════════════════════════════════════════════╝{END}
+""")
 
-# ======================= الدوال المساعدة =======================
-def print_banner():
-    """طباعة شعار GHENA على طريقة Kali"""
-    banner = f"""
-{KALI_CYAN}  ▄████  ██░ ██ ▓█████  ███▄    ▄▄▄      {KALI_YELLOW}▄▄▄      {KALI_GREEN} ▄▄▄      
-{KALI_CYAN} ██▒ ▀█▒▓██░ ██▒▓█   ▀  ██ ▀█   █▒████▄   {KALI_YELLOW}▒████▄   {KALI_GREEN}▒████▄    
-{KALI_CYAN}▒██░▄▄▄░▒██▀▀██░▒███   ▓██  ▀█ ██▒▒██  ▀█▄ {KALI_YELLOW}▒██  ▀█▄ {KALI_GREEN}▒██  ▀█▄  
-{KALI_CYAN}░▓█  ██▓░▓█ ░██ ▒▓█  ▄ ▓██▒  ▐▌██▒░██▄▄▄▄██{KALI_YELLOW}░██▄▄▄▄██{KALI_GREEN}░██▄▄▄▄██ 
-{KALI_CYAN}░▒▓███▀▒░▓█▒░██▓░▒████▒▒██░   ▓██░ ▓█   ▓██{KALI_YELLOW} ▓█   ▓██{KALI_GREEN} ▓█   ▓██
-{KALI_CYAN} ░▒   ▒  ▒ ░░▒░▒░░ ▒░ ░░ ▒░   ▒ ▒  ▒▒   ▓▒█{KALI_YELLOW} ▒▒   ▓▒█{KALI_GREEN} ▒▒   ▓▒█
-{KALI_CYAN}  ░   ░  ▒ ░▒░ ░ ░ ░  ░░ ░░   ░ ▒░  ▒   ▒▒ {KALI_YELLOW}  ▒   ▒▒ {KALI_GREEN}  ▒   ▒▒ 
-{KALI_CYAN}░ ░   ░  ░  ░░ ░   ░      ░   ░ ░   ░   ▒   {KALI_YELLOW} ░   ▒   {KALI_GREEN} ░   ▒  
-{KALI_CYAN}      ░  ░  ░  ░   ░  ░         ░       ░  ░{KALI_YELLOW}     ░  ░{KALI_GREEN}     ░  ░
-{KALI_END}
-{KALI_PURPLE}═══════════════════════════════════════════════════════════════{KALI_END}
-{KALI_BOLD}     GHENA KALI EDITION - Advanced CTF Solver for Kali Linux{KALI_END}
-{KALI_PURPLE}═══════════════════════════════════════════════════════════════{KALI_END}
-"""
-    print(banner)
+def ask(prompt, color=W):
+    return input(f"{color}{BOLD}{prompt}{END} ").strip()
 
-def print_step(step_num, description):
-    """طباعة خطوة مع تنسيق"""
-    print(f"\n{KALI_CYAN}[{KALI_BOLD}STEP {step_num}{KALI_END}{KALI_CYAN}]{KALI_END} {KALI_BOLD}{description}{KALI_END}")
+def show_cmd(cmd, why):
+    print(f"\n{Y}┌─ الأمر الجاي ──────────────────────────────{END}")
+    print(f"{Y}│{END} {DIM}السبب:{END} {why}")
+    print(f"{Y}│{END}")
+    print(f"{Y}│  {BOLD}{G}$ {cmd}{END}")
+    print(f"{Y}└────────────────────────────────────────────{END}")
 
-def print_info(message):
-    """طباعة معلومات"""
-    print(f"{KALI_BLUE}[*]{KALI_END} {message}")
-
-def print_success(message):
-    """طباعة نجاح"""
-    print(f"{KALI_GREEN}[+]{KALI_END} {message}")
-
-def print_warning(message):
-    """طباعة تحذير"""
-    print(f"{KALI_YELLOW}[!]{KALI_END} {message}")
-
-def print_error(message):
-    """طباعة خطأ"""
-    print(f"{KALI_RED}[-]{KALI_END} {message}")
-
-def print_table(title, data):
-    """طباعة جدول بسيط"""
-    print(f"\n{KALI_PURPLE}{title}{KALI_END}")
-    print(f"{KALI_PURPLE}{'-'*60}{KALI_END}")
-    for key, value in data.items():
-        print(f"  {KALI_BOLD}{key}:{KALI_END} {value}")
-    print(f"{KALI_PURPLE}{'-'*60}{KALI_END}")
-
-def run_command(cmd, timeout=120, show_output=True):
-    """تنفيذ أمر وعرضه"""
-    if show_output:
-        print(f"  {KALI_CYAN}▶{KALI_END} {cmd}")
+def run_cmd(cmd):
+    print(f"\n{DIM}[جاري التشغيل...]{END}\n")
     try:
-        result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT,
-                                       text=True, timeout=timeout)
-        return result
+        result = subprocess.run(cmd, shell=True, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+        return result.stdout
     except subprocess.TimeoutExpired:
-        print_warning(f"Command timed out: {cmd[:50]}...")
-    except subprocess.CalledProcessError as e:
-        print_warning(f"Command failed (code {e.returncode})")
+        return "TIMEOUT"
     except Exception as e:
-        print_error(f"Error: {e}")
-    return ""
+        return str(e)
 
-def animate_progress(duration=2, message="Scanning"):
-    """عرض شريط تقدم متحرك"""
-    chars = "█▓▒░"
-    for i in range(20):
-        percent = (i+1)*5
-        bar = chars[i%4] * (i+1) + " " * (19-i)
-        sys.stdout.write(f"\r  {KALI_GREEN}[{bar}]{KALI_END} {message} {percent}%")
-        sys.stdout.flush()
-        time.sleep(duration/20)
-    print()
+def get_output(cmd):
+    choice = input(f"\n{C}تشغّله أنا؟ (y) أو تحط المخرجات بنفسك؟ (n): {END}").strip().lower()
+    if choice == 'y':
+        out = run_cmd(cmd)
+        print(f"\n{DIM}──── المخرجات ────{END}")
+        print(out[:3000])
+        print(f"{DIM}──────────────────{END}")
+        return out
+    else:
+        print(f"{DIM}الصق المخرجات، واكتب END في سطر لوحده لما تخلص:{END}")
+        lines = []
+        while True:
+            line = input()
+            if line.strip() == 'END':
+                break
+            lines.append(line)
+        return '\n'.join(lines)
 
-# ======================= الفئة الرئيسية =======================
-class GhenaKali:
-    def __init__(self, target_ip):
-        self.ip = target_ip
-        self.results = {
-            "ports": [],
-            "services": {},
-            "web_techs": set(),
-            "directories": set(),
-            "cms": None,
-            "title": None,
-            "usernames": set(),
-            "passwords": set(),
-            "hashes": set(),
-            "flags": set(),
-            "answers": [],
-            "vulnerabilities": set()
-        }
-        self.start_time = datetime.now()
-        self.session_dir = Path(f"GHENA_{target_ip}_{int(time.time())}")
-        self.session_dir.mkdir(exist_ok=True)
-        self.load_db()
+# ── تحليل النتائج ──────────────────────────────────────
 
-    def load_db(self):
-        """تحميل قاعدة البيانات"""
-        if DB_PATH.exists():
-            with open(DB_PATH, 'r', encoding='utf-8') as f:
-                self.rooms_db = json.load(f)
-        else:
-            with open(DB_PATH, 'w', encoding='utf-8') as f:
-                json.dump(KALI_ROOMS, f, indent=4)
-            self.rooms_db = KALI_ROOMS
+def parse_nmap(output, ip):
+    ports = re.findall(r'(\d+)/tcp\s+open\s+(\S+)', output)
+    if not ports:
+        print(f"\n{R}ما لقيت بورتات. تأكد من الـ IP أو جرب:{END}")
+        return f"nmap -p- -T4 {ip}", "سكان كامل لكل البورتات"
 
-    def get_web_title(self, port):
-        protocol = 'https' if port in [443,8443] else 'http'
-        out = run_command(f"curl -s {protocol}://{self.ip}:{port} | grep -i '<title>' | head -1", show_output=False)
-        if out:
-            match = re.search(r'<title>(.*?)</title>', out, re.IGNORECASE)
-            if match:
-                return match.group(1).strip()
-        return None
+    print(f"\n{G}البورتات المفتوحة:{END}")
+    for port, svc in ports:
+        print(f"  {G}✓{END} {BOLD}{port}{END} → {svc}")
 
-    def get_cms(self, port):
-        protocol = 'https' if port in [443,8443] else 'http'
-        out = run_command(f"whatweb {protocol}://{self.ip}:{port} --log-verbose=/dev/null", show_output=False)
-        if out:
-            cms_list = ['WordPress', 'Joomla', 'Drupal', 'Magento', 'Simple Image Gallery', 'CMS Made Simple', 'Bolt']
-            for cms in cms_list:
-                if cms.lower() in out.lower():
-                    return cms
-        return None
+    port_nums = [int(p[0]) for p in ports]
 
-    def scan_web(self, port):
-        protocol = 'https' if port in [443,8443] else 'http'
-        print_info(f"Scanning web on port {port}...")
+    if any(p in port_nums for p in [80, 443, 8080, 8000, 8443]):
+        web = 443 if 443 in port_nums else (8080 if 8080 in port_nums else 80)
+        proto = 'https' if web == 443 else 'http'
+        print(f"\n{C}▸ لقيت ويب على {web} ← نفحصه{END}")
+        return f"whatweb {proto}://{ip}:{web}", "نكتشف التقنيات والـ CMS المستخدم"
 
-        # whatweb
-        out = run_command(f"whatweb {protocol}://{self.ip}:{port} --log-verbose=/dev/null")
-        if out:
-            techs = re.findall(r'([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\[', out)
-            for t in techs:
-                self.results["web_techs"].add(t)
+    if 21 in port_nums:
+        return f"nmap --script ftp-anon -p 21 {ip}", "نشوف إذا FTP مفتوح بدون كلمة مرور"
 
-        # gobuster
-        out = run_command(f"gobuster dir -u {protocol}://{self.ip}:{port} -w /usr/share/wordlists/dirb/common.txt -t 50 -q")
-        if out:
-            dirs = re.findall(r'/(\S+)\s+\(Status: 200\)', out)
-            for d in dirs:
-                self.results["directories"].add(d)
+    if 139 in port_nums or 445 in port_nums:
+        return f"enum4linux -a {ip}", "نستخرج مستخدمين ومشاركات SMB"
 
-        # title & cms
-        title = self.get_web_title(port)
-        if title:
-            self.results["title"] = title
-            print_success(f"Page title: {title}")
+    if 22 in port_nums:
+        user = ask("اسم مستخدم إذا عندك (Enter للتخطي):") or "admin"
+        return f"hydra -l {user} -P /usr/share/wordlists/rockyou.txt ssh://{ip}", "نجرب كلمات مرور SSH"
 
-        cms = self.get_cms(port)
-        if cms:
-            self.results["cms"] = cms
-            print_success(f"CMS detected: {cms}")
+    return f"nmap -sV -sC {ip}", "نعمل سكان أعمق مع الإصدارات"
 
-    def scan_ftp(self):
-        if 21 not in self.results["ports"]:
-            return
-        print_info("Checking FTP...")
-        out = run_command(f"nmap --script ftp-anon -p 21 {self.ip}")
-        if "Anonymous FTP login allowed" in out:
-            print_success("FTP anonymous login allowed")
-            ftp_out = run_command(f"echo -e 'anonymous\\n\\nls\\nbye' | ftp -n {self.ip} 2>/dev/null")
-            files = re.findall(r'^-rw-r--r--.*?(\S+)$', ftp_out, re.MULTILINE)
-            if files:
-                print_info(f"Files: {', '.join(files)}")
+def parse_whatweb(output, ip):
+    ol = output.lower()
+    cms_map = {
+        'wordpress':       (f"wpscan --url http://{ip} --enumerate u,p,t",     "نفحص WordPress ونبحث عن ثغرات"),
+        'joomla':          (f"joomscan -u http://{ip}",                         "نفحص Joomla"),
+        'drupal':          (f"droopescan scan drupal -u http://{ip}",           "نفحص Drupal"),
+        'bolt':            (f"searchsploit bolt cms",                            "نبحث عن ثغرات Bolt"),
+        'cms made simple': (f"searchsploit cms made simple",                    "نبحث عن ثغرات CMS Made Simple"),
+    }
+    for key, (cmd, why) in cms_map.items():
+        if key in ol:
+            print(f"\n{G}✓ اكتشفت: {BOLD}{key.title()}{END}")
+            return cmd, why
 
-    def scan_smb(self):
-        if any(p in [139,445] for p in self.results["ports"]):
-            print_info("Checking SMB...")
-            out = run_command(f"enum4linux -a {self.ip}")
-            if out:
-                users = re.findall(r'user:\[(\S+)\]', out)
-                for u in users:
-                    self.results["usernames"].add(u)
-                if users:
-                    print_success(f"SMB users: {', '.join(users)}")
+    print(f"\n{C}ما اكتشفت CMS ← نبحث عن مجلدات مخفية{END}")
+    return (f"gobuster dir -u http://{ip} -w /usr/share/wordlists/dirb/common.txt -t 50 -q",
+            "نكتشف صفحات ومجلدات مخفية")
 
-    def scan_ssh(self):
-        if 22 in self.results["ports"]:
-            print_info("Checking SSH...")
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(5)
-                sock.connect((self.ip, 22))
-                banner = sock.recv(1024).decode()
-                sock.close()
-                print_success(f"SSH Banner: {banner.strip()}")
-            except:
-                pass
+def parse_gobuster(output, ip):
+    found = re.findall(r'(/\S+)\s+\(Status: 200', output)
+    print(f"\n{G}المجلدات:{END}")
+    for d in found[:10]:
+        print(f"  {G}✓{END} {d}")
 
-    def hunt_flags(self, web_ports):
-        print_info("Hunting for flags...")
-        flag_paths = [
-            "/flag.txt", "/root/flag.txt", "/root/root.txt", "/root.txt",
-            "/home/*/flag.txt", "/home/*/user.txt", "/user.txt",
-            "/var/www/flag.txt", "/tmp/flag.txt", "/.flag", "/secret.txt"
-        ]
-        found = 0
-        for port in web_ports:
-            protocol = 'https' if port in [443,8443] else 'http'
-            for path in flag_paths:
-                out = run_command(f"curl -s {protocol}://{self.ip}:{port}{path}", show_output=False)
-                if out and len(out) < 500:
-                    patterns = [r'THM\{[^}]+\}', r'flag\{[^}]+\}', r'FLAG\{[^}]+\}']
-                    for pat in patterns:
-                        matches = re.findall(pat, out)
-                        for m in matches:
-                            if m not in self.results["flags"]:
-                                self.results["flags"].add(m)
-                                print_success(f"Flag found at {path}: {m}")
-                                found += 1
-        if found == 0:
-            print_warning("No flags found in common locations.")
+    priority = ['/admin', '/login', '/wp-admin', '/administrator', '/panel',
+                '/dashboard', '/upload', '/cms', '/secret', '/backup']
+    for p in priority:
+        if p in found:
+            print(f"\n{C}▸ لقيت {p} ← نفحصه{END}")
+            return (f"curl -s http://{ip}{p} | grep -i 'version\\|login\\|error\\|user'",
+                    f"نفحص محتوى {p}")
 
-    def identify_room(self):
-        """التعرف على الغرفة باستخدام المنافذ والمعلومات"""
-        ports_set = set(self.results["ports"])
-        best_match = None
-        best_score = 0
-        for room_id, data in self.rooms_db.items():
-            known_ports = set(data.get("ports", []))
-            if not known_ports:
+    if found:
+        return f"curl -s http://{ip}{found[0]}", f"نفحص {found[0]}"
+
+    print(f"\n{Y}ما لقيت شي ← نجرب قائمة أكبر{END}")
+    return (f"gobuster dir -u http://{ip} -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -t 50 -q",
+            "نجرب قائمة مجلدات أكبر")
+
+def parse_searchsploit(output, ip):
+    lines = [l for l in output.split('\n') if '|' in l and 'EDB' not in l and '---' not in l]
+    if lines:
+        print(f"\n{G}الثغرات المتاحة:{END}")
+        for i, l in enumerate(lines[:6], 1):
+            print(f"  {Y}{i}.{END} {l.strip()}")
+        print(f"\n{C}▸ عندك ثغرات ← رح نستخدم Metasploit{END}")
+        return "msfconsole -q", "نشغل Metasploit لاستغلال الثغرة"
+    return f"nmap --script vuln {ip}", "نفحص الثغرات مباشرة بـ nmap"
+
+def parse_enum4linux(output, ip):
+    users = re.findall(r'user:\[(\w+)\]', output)
+    if users:
+        print(f"\n{G}المستخدمين:{END}")
+        for u in users: print(f"  {G}✓{END} {u}")
+        return (f"hydra -l {users[0]} -P /usr/share/wordlists/rockyou.txt ssh://{ip}",
+                f"نجرب كلمات مرور لـ {users[0]}")
+    return f"smbclient -L //{ip} -N", "نشوف المشاركات المتاحة"
+
+def parse_sudo(output, ip):
+    bins = ['vim','nano','python','python3','perl','ruby','find','nmap','awk',
+            'less','more','man','cp','bash','sh','env','git','docker','tar','wget','curl']
+    ol = output.lower()
+    for b in bins:
+        if b in ol:
+            print(f"\n{G}✓ لقيت {b} في sudo!{END}")
+            print(f"  {C}▸ راجع: https://gtfobins.github.io/gtfobins/{b}/{END}")
+            return f"sudo {b}", f"استغل {b} للوصول لـ root (راجع GTFOBins للأمر الصح)"
+    if 'nopasswd' in ol:
+        return "sudo su", "نحاول نصير root مباشرة"
+    print(f"\n{C}ما لقيت شي بـ sudo ← نفحص SUID{END}")
+    return "find / -perm -u=s -type f 2>/dev/null", "نبحث عن ملفات SUID"
+
+def parse_suid(output, ip):
+    interesting = ['vim','find','python','python3','bash','sh','nmap','env','perl','ruby']
+    found = re.findall(r'/(?:usr/bin|bin)/(\w+)', output)
+    for b in interesting:
+        if b in found:
+            print(f"\n{G}✓ لقيت SUID على {b}!{END}")
+            print(f"  {C}▸ راجع: https://gtfobins.github.io/gtfobins/{b}/{END}")
+            return f"# استخدم الأمر من GTFOBins لـ {b}", "رفع الصلاحيات عبر SUID"
+    return "cat /etc/crontab && ls -la /etc/cron*", "نفحص المهام المجدولة"
+
+# ── المحلل الرئيسي ─────────────────────────────────────
+
+def analyze(output, cmd, ip):
+    cl = cmd.lower()
+    if 'nmap' in cl and ('-f' in cl or '-p-' in cl or '-sv' in cl or '-sc' in cl):
+        return parse_nmap(output, ip)
+    if 'whatweb' in cl:
+        return parse_whatweb(output, ip)
+    if 'gobuster' in cl:
+        return parse_gobuster(output, ip)
+    if 'searchsploit' in cl:
+        return parse_searchsploit(output, ip)
+    if 'enum4linux' in cl:
+        return parse_enum4linux(output, ip)
+    if 'sudo -l' in cl:
+        return parse_sudo(output, ip)
+    if 'find / -perm' in cl:
+        return parse_suid(output, ip)
+
+    # غير معروف ← اسأل
+    print(f"\n{Y}شو طلع معك؟{END}")
+    print(f"  {C}1{END} → وصلت shell")
+    print(f"  {C}2{END} → لقيت مستخدم أو كلمة مرور")
+    print(f"  {C}3{END} → داخل الجهاز الآن")
+    print(f"  {C}4{END} → ما لقيت شي")
+    ch = ask("اختيارك:")
+    if ch == '1':
+        return ("python3 -c 'import pty;pty.spawn(\"/bin/bash\")' && export TERM=xterm",
+                "نحسن الـ shell")
+    if ch == '2':
+        return f"ssh <user>@{ip}", "ندخل بالبيانات اللي حصلنا عليها"
+    if ch == '3':
+        return "sudo -l", "نفحص صلاحيات sudo"
+    return f"nmap -sV -sC -p- -T4 {ip}", "نعمل سكان أعمق"
+
+# ── نقطة الدخول ────────────────────────────────────────
+
+def main():
+    cls()
+    banner()
+
+    ip = ask("▸ IP الهدف (مثال: 10.10.10.10):", C)
+    if not ip:
+        print(f"{R}لازم تحط IP{END}"); sys.exit(1)
+
+    print(f"\n{G}✓ الهدف: {BOLD}{ip}{END}")
+
+    current_cmd = f"nmap -F -T4 {ip}"
+    current_why = "نكتشف البورتات المفتوحة"
+    step = 1
+
+    while True:
+        print(f"\n{P}{'═'*48}{END}")
+        print(f"{P}  خطوة {step}{END}")
+        print(f"{P}{'═'*48}{END}")
+
+        show_cmd(current_cmd, current_why)
+        output = get_output(current_cmd)
+
+        if not output or len(output.strip()) < 3:
+            print(f"\n{Y}ما في مخرجات. تأكد إن الأمر اشتغل.{END}")
+            if ask("تجرب مرة ثانية؟ (y/n):").lower() == 'y':
                 continue
-            score = len(ports_set.intersection(known_ports))
-            if score > best_score:
-                best_score = score
-                best_match = room_id
-        if best_match and best_score >= len(self.rooms_db[best_match]["ports"]) * 0.6:
-            return best_match
-        return None
+            break
 
-    def run(self):
-        print_banner()
-        print(f"{KALI_PURPLE}[>]{KALI_END} Target: {KALI_BOLD}{self.ip}{KALI_END}")
-        print(f"{KALI_PURPLE}[>]{KALI_END} Started at: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"{KALI_PURPLE}[>]{KALI_END} Session directory: {self.session_dir}\n")
+        next_cmd, next_why = analyze(output, current_cmd, ip)
+        if not next_cmd:
+            print(f"\n{G}عالق؟ خبرني شو طلع وأساعدك!{END}")
+            break
 
-        # 1. Nmap scan
-        print_step(1, "RECONNAISSANCE - Port scanning")
-        animate_progress(2, "Scanning ports")
-        out = run_command(f"nmap -F -sV -T4 {self.ip}", timeout=300)
-        if out:
-            for line in out.split('\n'):
-                m = re.search(r'(\d+)/tcp\s+open\s+(\S+)', line)
-                if m:
-                    port, svc = int(m.group(1)), m.group(2)
-                    self.results["ports"].append(port)
-                    self.results["services"][port] = svc
-                    print_success(f"Port {port}: {svc}")
-        if not self.results["ports"]:
-            print_warning("No open ports found. Trying full scan...")
-            out = run_command(f"nmap -p- -T4 {self.ip}", timeout=600)
-            if out:
-                for line in out.split('\n'):
-                    m = re.search(r'(\d+)/tcp\s+open', line)
-                    if m:
-                        port = int(m.group(1))
-                        self.results["ports"].append(port)
-                        self.results["services"][port] = "unknown"
-                        print_success(f"Port {port}: unknown")
+        current_cmd, current_why = next_cmd, next_why
+        step += 1
 
-        if not self.results["ports"]:
-            print_error("No open ports found. Target may be down.")
-            return
+        if ask(f"\n{C}نكمل للخطوة الجاية؟ (Enter / q للخروج):{END}").lower() == 'q':
+            break
 
-        # 2. Web enumeration
-        web_ports = [p for p in self.results["ports"] if p in [80,443,8080,8443,8000,8888] or 'http' in self.results["services"].get(p,'')]
-        if web_ports:
-            print_step(2, "WEB ENUMERATION - Analyzing web services")
-            for port in web_ports:
-                self.scan_web(port)
+    print(f"\n{C}{'═'*48}")
+    print(f"  عالق؟ ارجعلي وقلي شو المخرجات!")
+    print(f"{'═'*48}{END}\n")
 
-        # 3. Room identification
-        print_step(3, "ROOM IDENTIFICATION")
-        room_id = self.identify_room()
-        if room_id:
-            data = self.rooms_db[room_id]
-            print_success(f"Room identified: {data['name']}")
-            # عرض الثغرات
-            if data.get('vulnerabilities'):
-                print_info("Vulnerabilities:")
-                for v in data['vulnerabilities']:
-                    print(f"    - {v}")
-                    self.results['vulnerabilities'].add(v)
-            # عرض الإجابات
-            if data.get('answers'):
-                print_info("CTF Answers:")
-                for ans in data['answers']:
-                    print(f"    {KALI_GREEN}•{KALI_END} {ans}")
-                    self.results['answers'].append(ans)
-        else:
-            print_warning("Room not in database. Performing deep enumeration...")
-
-        # 4. Service enumeration
-        print_step(4, "SERVICE ENUMERATION")
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            executor.submit(self.scan_ftp)
-            executor.submit(self.scan_smb)
-            executor.submit(self.scan_ssh)
-
-        # 5. Flag hunting
-        if web_ports:
-            print_step(5, "FLAG HUNTING")
-            self.hunt_flags(web_ports)
-
-        # 6. Generate report
-        print_step(6, "GENERATING REPORT")
-        self.generate_report()
-
-    def generate_report(self):
-        """إنشاء تقرير وحفظه"""
-        elapsed = (datetime.now() - self.start_time).total_seconds()
-        report_file = self.session_dir / "report.txt"
-        with open(report_file, 'w') as f:
-            f.write("="*60 + "\n")
-            f.write("GHENA KALI EDITION - ATTACK REPORT\n")
-            f.write(f"Target: {self.ip}\n")
-            f.write(f"Date: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Duration: {elapsed:.2f} seconds\n")
-            f.write("="*60 + "\n\n")
-
-            f.write("OPEN PORTS:\n")
-            for p in sorted(self.results['ports']):
-                svc = self.results['services'].get(p, 'unknown')
-                f.write(f"  {p}: {svc}\n")
-            f.write("\n")
-
-            if self.results['web_techs']:
-                f.write("WEB TECHNOLOGIES:\n")
-                for t in sorted(self.results['web_techs']):
-                    f.write(f"  {t}\n")
-                f.write("\n")
-
-            if self.results['directories']:
-                f.write("DIRECTORIES:\n")
-                for d in sorted(self.results['directories']):
-                    f.write(f"  /{d}\n")
-                f.write("\n")
-
-            if self.results['cms']:
-                f.write(f"CMS: {self.results['cms']}\n\n")
-
-            if self.results['title']:
-                f.write(f"PAGE TITLE: {self.results['title']}\n\n")
-
-            if self.results['usernames']:
-                f.write("USERNAMES:\n")
-                for u in sorted(self.results['usernames']):
-                    f.write(f"  {u}\n")
-                f.write("\n")
-
-            if self.results['passwords']:
-                f.write("PASSWORDS/HASHES:\n")
-                for p in sorted(self.results['passwords']):
-                    f.write(f"  {p}\n")
-                f.write("\n")
-
-            if self.results['flags']:
-                f.write("FLAGS:\n")
-                for fl in sorted(self.results['flags']):
-                    f.write(f"  {fl}\n")
-                f.write("\n")
-
-            if self.results['vulnerabilities']:
-                f.write("VULNERABILITIES:\n")
-                for v in sorted(self.results['vulnerabilities']):
-                    f.write(f"  {v}\n")
-                f.write("\n")
-
-            if self.results['answers']:
-                f.write("CTF ANSWERS:\n")
-                for a in self.results['answers']:
-                    f.write(f"  {a}\n")
-
-        print_success(f"Report saved to {report_file}")
-        print(f"{KALI_CYAN}[{KALI_BOLD}✓{KALI_END}{KALI_CYAN}]{KALI_END} Attack completed in {elapsed:.2f} seconds.")
-
-# ======================= نقطة الدخول =======================
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print_banner()
-        print(f"{KALI_YELLOW}Usage: python3 ghena-kali.py <TARGET_IP>{KALI_END}")
-        print(f"{KALI_YELLOW}Example: python3 ghena-kali.py 10.10.10.10{KALI_END}")
-        sys.exit(1)
-    target = sys.argv[1]
-    solver = GhenaKali(target)
     try:
-        solver.run()
+        main()
     except KeyboardInterrupt:
-        print(f"\n{KALI_YELLOW}[!] Interrupted by user.{KALI_END}")
-        solver.generate_report()
-    except Exception as e:
-        print_error(f"Unexpected error: {e}")
+        print(f"\n\n{Y}[!] تم الإيقاف.{END}\n")
