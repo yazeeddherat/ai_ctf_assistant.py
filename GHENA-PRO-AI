@@ -6,12 +6,32 @@ THM Interactive Guide
 """
 
 import subprocess, sys, re, os, shutil
+from datetime import datetime
 
 G = '\033[92m'; R = '\033[91m'; Y = '\033[93m'
 C = '\033[96m'; B = '\033[94m'; P = '\033[95m'
 W = '\033[97m'; BOLD = '\033[1m'; DIM = '\033[2m'; END = '\033[0m'
 
+session_findings = []
+log_filename = f"thm_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+def log_to_file(text):
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(text + "\n")
+
 def cls(): os.system('clear')
+
+def show_summary():
+    print(f"\n{P}{'═'*48}{END}")
+    print(f"{P}  ملخص الجلسة (Session Summary){END}")
+    print(f"{P}{'═'*48}{END}")
+    if not session_findings:
+        print(f"{Y}  لم يتم العثور على نتائج هامة.{END}")
+    else:
+        for f in set(session_findings): # Use set to avoid duplicates
+            print(f"  {G}✓{END} {f}")
+    print(f"\n{C}التفاصيل الكاملة موجودة في: {log_filename}{END}")
+    print(f"{P}{'═'*48}{END}\n")
 
 def banner():
     print(f"""
@@ -61,11 +81,14 @@ def show_cmd(cmd, why):
 
 def run_cmd(cmd):
     print(f"\n{DIM}[جاري التشغيل...]{END}\n")
+    log_to_file(f"[*] Executing command: {cmd}")
     try:
         result = subprocess.run(cmd, shell=True, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+        log_to_file(f"--- Output ---\n{result.stdout}\n--------------")
         return result.stdout
     except subprocess.TimeoutExpired:
+        log_to_file("[!] Command Timed Out")
         return "TIMEOUT"
     except Exception as e:
         return str(e)
@@ -79,6 +102,7 @@ def get_output(cmd):
         print(f"{DIM}──────────────────{END}")
         return out
     else:
+        log_to_file(f"[*] User manual command: {cmd}")
         print(f"{DIM}الصق المخرجات، واكتب END في سطر لوحده لما تخلص:{END}")
         lines = []
         while True:
@@ -89,7 +113,9 @@ def get_output(cmd):
                 lines.append(line)
             except (EOFError, KeyboardInterrupt):
                 break
-        return '\n'.join(lines)
+        out = '\n'.join(lines)
+        log_to_file(f"--- User Output ---\n{out}\n--------------")
+        return out
 
 # ── تحليل النتائج ──────────────────────────────────────
 
@@ -102,6 +128,7 @@ def parse_nmap(output, ip):
     print(f"\n{G}البورتات المفتوحة:{END}")
     for port, svc in ports:
         print(f"  {G}✓{END} {BOLD}{port}{END} → {svc}")
+        session_findings.append(f"Port {port} ({svc}) is open")
 
     port_nums = [int(p[0]) for p in ports]
 
@@ -145,6 +172,7 @@ def parse_whatweb(output, ip):
     for key, (cmd, why) in cms_map.items():
         if key in ol:
             print(f"\n{G}✓ اكتشفت: {BOLD}{key.title()}{END}")
+            session_findings.append(f"CMS Detected: {key.title()}")
             return cmd, why
 
     print(f"\n{C}ما اكتشفت CMS ← نبحث عن مجلدات مخفية{END}")
@@ -157,6 +185,7 @@ def parse_gobuster(output, ip):
     print(f"\n{G}المجلدات:{END}")
     for d in found[:10]:
         print(f"  {G}✓{END} {d}")
+        session_findings.append(f"Hidden directory found: {d}")
 
     priority = ['/admin', '/login', '/wp-admin', '/administrator', '/panel',
                 '/dashboard', '/upload', '/cms', '/secret', '/backup']
@@ -188,7 +217,9 @@ def parse_enum4linux(output, ip):
     users = re.findall(r'user:\[(\w+)\]', output)
     if users:
         print(f"\n{G}المستخدمين:{END}")
-        for u in users: print(f"  {G}✓{END} {u}")
+        for u in users:
+            print(f"  {G}✓{END} {u}")
+            session_findings.append(f"SMB User found: {u}")
         rockyou = find_wordlist("rockyou.txt")
         return (f"hydra -l {users[0]} -P {rockyou} ssh://{ip}",
                 f"نجرب كلمات مرور لـ {users[0]}")
@@ -201,6 +232,7 @@ def parse_sudo(output, ip):
     for b in bins:
         if b in ol:
             print(f"\n{G}✓ لقيت {b} في sudo!{END}")
+            session_findings.append(f"Sudo vulnerability: {b} can be run as root")
             print(f"  {C}▸ راجع: https://gtfobins.github.io/gtfobins/{b}/{END}")
             return f"sudo {b}", f"استغل {b} للوصول لـ root (راجع GTFOBins للأمر الصح)"
     if 'nopasswd' in ol:
@@ -214,6 +246,7 @@ def parse_suid(output, ip):
     for b in interesting:
         if b in found:
             print(f"\n{G}✓ لقيت SUID على {b}!{END}")
+            session_findings.append(f"SUID bit found on: {b}")
             print(f"  {C}▸ راجع: https://gtfobins.github.io/gtfobins/{b}/{END}")
             return f"# استخدم الأمر من GTFOBins لـ {b}", "رفع الصلاحيات عبر SUID"
     return "cat /etc/crontab && ls -la /etc/cron*", "نفحص المهام المجدولة"
@@ -294,12 +327,11 @@ def main():
         if ask(f"\n{C}نكمل للخطوة الجاية؟ (Enter / q للخروج):{END}").lower() == 'q':
             break
 
-    print(f"\n{C}{'═'*48}")
-    print(f"  عالق؟ ارجعلي وقلي شو المخرجات!")
-    print(f"{'═'*48}{END}\n")
+    show_summary()
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n\n{Y}[!] تم الإيقاف.{END}\n")
+        print(f"\n\n{Y}[!] تم الإيقاف.{END}")
+        show_summary()
