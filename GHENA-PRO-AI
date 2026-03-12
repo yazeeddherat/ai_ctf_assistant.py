@@ -5,13 +5,33 @@ THM Interactive Guide
 الاستخدام: python3 thm_guide.py
 """
 
-import subprocess, sys, re, os
+import subprocess, sys, re, os, shutil
+from datetime import datetime
 
 G = '\033[92m'; R = '\033[91m'; Y = '\033[93m'
 C = '\033[96m'; B = '\033[94m'; P = '\033[95m'
 W = '\033[97m'; BOLD = '\033[1m'; DIM = '\033[2m'; END = '\033[0m'
 
+session_findings = []
+log_filename = f"thm_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+def log_to_file(text):
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(text + "\n")
+
 def cls(): os.system('clear')
+
+def show_summary():
+    print(f"\n{P}{'═'*48}{END}")
+    print(f"{P}  ملخص الجلسة (Session Summary){END}")
+    print(f"{P}{'═'*48}{END}")
+    if not session_findings:
+        print(f"{Y}  لم يتم العثور على نتائج هامة.{END}")
+    else:
+        for f in set(session_findings): # Use set to avoid duplicates
+            print(f"  {G}✓{END} {f}")
+    print(f"\n{C}التفاصيل الكاملة موجودة في: {log_filename}{END}")
+    print(f"{P}{'═'*48}{END}\n")
 
 def banner():
     print(f"""
@@ -22,7 +42,34 @@ def banner():
 """)
 
 def ask(prompt, color=W):
-    return input(f"{color}{BOLD}{prompt}{END} ").strip()
+    try:
+        return input(f"{color}{BOLD}{prompt}{END} ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print(f"\n{Y}[!] تم الإيقاف.{END}")
+        sys.exit(0)
+
+def sanitize(text):
+    # يسمح بالأحرف، الأرقام، النقاط، الشرطات، والنقطتين (للـ IPv6 واليوزرنيم)
+    return re.sub(r'[^a-zA-Z0-9\.\-\_\:]', '', text)
+
+def check_tool(cmd):
+    tool = cmd.split()[0]
+    if not shutil.which(tool):
+        print(f"{R}[!] تحذير: الأداة '{tool}' غير مثبتة على جهازك.{END}")
+        return False
+    return True
+
+def find_wordlist(name):
+    paths = [
+        f"/usr/share/wordlists/{name}",
+        f"/usr/share/wordlists/dirb/{name}",
+        f"/usr/share/wordlists/dirbuster/{name}",
+        f"/opt/wordlists/{name}",
+        name
+    ]
+    for p in paths:
+        if os.path.exists(p): return p
+    return f"/usr/share/wordlists/{name}" # Default
 
 def show_cmd(cmd, why):
     print(f"\n{Y}┌─ الأمر الجاي ──────────────────────────────{END}")
@@ -30,20 +77,24 @@ def show_cmd(cmd, why):
     print(f"{Y}│{END}")
     print(f"{Y}│  {BOLD}{G}$ {cmd}{END}")
     print(f"{Y}└────────────────────────────────────────────{END}")
+    check_tool(cmd)
 
 def run_cmd(cmd):
     print(f"\n{DIM}[جاري التشغيل...]{END}\n")
+    log_to_file(f"[*] Executing command: {cmd}")
     try:
         result = subprocess.run(cmd, shell=True, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+        log_to_file(f"--- Output ---\n{result.stdout}\n--------------")
         return result.stdout
     except subprocess.TimeoutExpired:
+        log_to_file("[!] Command Timed Out")
         return "TIMEOUT"
     except Exception as e:
         return str(e)
 
 def get_output(cmd):
-    choice = input(f"\n{C}تشغّله أنا؟ (y) أو تحط المخرجات بنفسك؟ (n): {END}").strip().lower()
+    choice = ask(f"\n{C}تشغّله أنا؟ (y) أو تحط المخرجات بنفسك؟ (n): {END}").strip().lower()
     if choice == 'y':
         out = run_cmd(cmd)
         print(f"\n{DIM}──── المخرجات ────{END}")
@@ -51,14 +102,20 @@ def get_output(cmd):
         print(f"{DIM}──────────────────{END}")
         return out
     else:
+        log_to_file(f"[*] User manual command: {cmd}")
         print(f"{DIM}الصق المخرجات، واكتب END في سطر لوحده لما تخلص:{END}")
         lines = []
         while True:
-            line = input()
-            if line.strip() == 'END':
+            try:
+                line = input()
+                if line.strip() == 'END':
+                    break
+                lines.append(line)
+            except (EOFError, KeyboardInterrupt):
                 break
-            lines.append(line)
-        return '\n'.join(lines)
+        out = '\n'.join(lines)
+        log_to_file(f"--- User Output ---\n{out}\n--------------")
+        return out
 
 # ── تحليل النتائج ──────────────────────────────────────
 
@@ -71,6 +128,7 @@ def parse_nmap(output, ip):
     print(f"\n{G}البورتات المفتوحة:{END}")
     for port, svc in ports:
         print(f"  {G}✓{END} {BOLD}{port}{END} → {svc}")
+        session_findings.append(f"Port {port} ({svc}) is open")
 
     port_nums = [int(p[0]) for p in ports]
 
@@ -87,8 +145,18 @@ def parse_nmap(output, ip):
         return f"enum4linux -a {ip}", "نستخرج مستخدمين ومشاركات SMB"
 
     if 22 in port_nums:
-        user = ask("اسم مستخدم إذا عندك (Enter للتخطي):") or "admin"
-        return f"hydra -l {user} -P /usr/share/wordlists/rockyou.txt ssh://{ip}", "نجرب كلمات مرور SSH"
+        user = sanitize(ask("اسم مستخدم إذا عندك (Enter للتخطي):") or "admin")
+        rockyou = find_wordlist("rockyou.txt")
+        return f"hydra -l {user} -P {rockyou} ssh://{ip}", "نجرب كلمات مرور SSH"
+
+    if 3306 in port_nums:
+        return f"nmap --script mysql-empty-password,mysql-users -p 3306 {ip}", "نفحص MySQL بحثاً عن كلمات مرور فارغة ومستخدمين"
+
+    if 3389 in port_nums:
+        return f"nmap --script rdp-enum-encryption,rdp-vuln-ms12-020 -p 3389 {ip}", "نفحص RDP بحثاً عن ثغرات وتشفير"
+
+    if 6379 in port_nums:
+        return f"redis-cli -h {ip} info", "نحاول الاتصال بـ Redis واستخراج معلومات"
 
     return f"nmap -sV -sC {ip}", "نعمل سكان أعمق مع الإصدارات"
 
@@ -104,10 +172,12 @@ def parse_whatweb(output, ip):
     for key, (cmd, why) in cms_map.items():
         if key in ol:
             print(f"\n{G}✓ اكتشفت: {BOLD}{key.title()}{END}")
+            session_findings.append(f"CMS Detected: {key.title()}")
             return cmd, why
 
     print(f"\n{C}ما اكتشفت CMS ← نبحث عن مجلدات مخفية{END}")
-    return (f"gobuster dir -u http://{ip} -w /usr/share/wordlists/dirb/common.txt -t 50 -q",
+    common = find_wordlist("common.txt")
+    return (f"gobuster dir -u http://{ip} -w {common} -t 50 -q",
             "نكتشف صفحات ومجلدات مخفية")
 
 def parse_gobuster(output, ip):
@@ -115,6 +185,7 @@ def parse_gobuster(output, ip):
     print(f"\n{G}المجلدات:{END}")
     for d in found[:10]:
         print(f"  {G}✓{END} {d}")
+        session_findings.append(f"Hidden directory found: {d}")
 
     priority = ['/admin', '/login', '/wp-admin', '/administrator', '/panel',
                 '/dashboard', '/upload', '/cms', '/secret', '/backup']
@@ -128,7 +199,8 @@ def parse_gobuster(output, ip):
         return f"curl -s http://{ip}{found[0]}", f"نفحص {found[0]}"
 
     print(f"\n{Y}ما لقيت شي ← نجرب قائمة أكبر{END}")
-    return (f"gobuster dir -u http://{ip} -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -t 50 -q",
+    medium = find_wordlist("directory-list-2.3-medium.txt")
+    return (f"gobuster dir -u http://{ip} -w {medium} -t 50 -q",
             "نجرب قائمة مجلدات أكبر")
 
 def parse_searchsploit(output, ip):
@@ -145,8 +217,11 @@ def parse_enum4linux(output, ip):
     users = re.findall(r'user:\[(\w+)\]', output)
     if users:
         print(f"\n{G}المستخدمين:{END}")
-        for u in users: print(f"  {G}✓{END} {u}")
-        return (f"hydra -l {users[0]} -P /usr/share/wordlists/rockyou.txt ssh://{ip}",
+        for u in users:
+            print(f"  {G}✓{END} {u}")
+            session_findings.append(f"SMB User found: {u}")
+        rockyou = find_wordlist("rockyou.txt")
+        return (f"hydra -l {users[0]} -P {rockyou} ssh://{ip}",
                 f"نجرب كلمات مرور لـ {users[0]}")
     return f"smbclient -L //{ip} -N", "نشوف المشاركات المتاحة"
 
@@ -157,6 +232,7 @@ def parse_sudo(output, ip):
     for b in bins:
         if b in ol:
             print(f"\n{G}✓ لقيت {b} في sudo!{END}")
+            session_findings.append(f"Sudo vulnerability: {b} can be run as root")
             print(f"  {C}▸ راجع: https://gtfobins.github.io/gtfobins/{b}/{END}")
             return f"sudo {b}", f"استغل {b} للوصول لـ root (راجع GTFOBins للأمر الصح)"
     if 'nopasswd' in ol:
@@ -170,6 +246,7 @@ def parse_suid(output, ip):
     for b in interesting:
         if b in found:
             print(f"\n{G}✓ لقيت SUID على {b}!{END}")
+            session_findings.append(f"SUID bit found on: {b}")
             print(f"  {C}▸ راجع: https://gtfobins.github.io/gtfobins/{b}/{END}")
             return f"# استخدم الأمر من GTFOBins لـ {b}", "رفع الصلاحيات عبر SUID"
     return "cat /etc/crontab && ls -la /etc/cron*", "نفحص المهام المجدولة"
@@ -215,7 +292,7 @@ def main():
     cls()
     banner()
 
-    ip = ask("▸ IP الهدف (مثال: 10.10.10.10):", C)
+    ip = sanitize(ask("▸ IP الهدف (مثال: 10.10.10.10):", C))
     if not ip:
         print(f"{R}لازم تحط IP{END}"); sys.exit(1)
 
@@ -250,12 +327,11 @@ def main():
         if ask(f"\n{C}نكمل للخطوة الجاية؟ (Enter / q للخروج):{END}").lower() == 'q':
             break
 
-    print(f"\n{C}{'═'*48}")
-    print(f"  عالق؟ ارجعلي وقلي شو المخرجات!")
-    print(f"{'═'*48}{END}\n")
+    show_summary()
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n\n{Y}[!] تم الإيقاف.{END}\n")
+        print(f"\n\n{Y}[!] تم الإيقاف.{END}")
+        show_summary()
