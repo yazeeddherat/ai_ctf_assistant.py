@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-VETERAN CTF ASSISTANT v4.0 [Autonomous Logic]
-Experience: 10+ Years - Multi-Vector Switching
+VETERAN CTF ASSISTANT v5.0 [Autonomous & Diagnostic Mode]
+تحليل كامل لكل خطوة + شرح مفصل للأخطاء بالعربي
 """
 
 import subprocess, sys, re, os
 
-# Colors
+# الألوان
 G = '\033[38;5;82m'; R = '\033[38;5;196m'; Y = '\033[38;5;226m'
 C = '\033[38;5;51m'; M = '\033[38;5;201m'; W = '\033[38;5;255m'; END = '\033[0m'
 
@@ -15,53 +15,68 @@ def cls(): os.system('clear')
 
 def veteran_banner():
     print(f"{C}┌──────────────────────────────────────────────────────────┐")
-    print(f"│  {W}VETERAN CTF AUTO-LOGIC {G}[Expert Methodology]{C}          │")
+    print(f"│  {W}VETERAN CTF ASSISTANT {G}[Diagnostic Edition]{C}           │")
+    print(f"│  {M}نظام الخبير: تحليل ذكي + شرح للأخطاء البرمجية{C}         │")
     print(f"└──────────────────────────────────────────────────────────┘{END}")
 
-def explain(msg):
-    print(f"\n{M}[المنهجية التكتيكية]{END} {W}{msg}{END}")
+def explain(title, msg, color=W):
+    print(f"\n{color}[{title}]{END} {msg}")
 
-def show_cmd(cmd):
-    print(f"{G}# {cmd}{END}")
+def diagnose_error(cmd, error_msg):
+    """تحليل سبب الخطأ وشرحه بالعربي"""
+    explain("تشخيص الخطأ برمجياً", "حدثت مشكلة أثناء محاولة تنفيذ الأمر.", R)
+    
+    if "not found" in error_msg.lower():
+        tool = cmd.split()[0]
+        print(f"{Y}الشرح:{END} يبدو أن أداة {BOLD}{tool}{END} غير مثبتة على نظامك (Kali).")
+        print(f"{G}الحل:{END} جرب تثبيتها عبر الأمر: {W}sudo apt install {tool}{END}")
+    
+    elif "permission denied" in error_msg.lower():
+        print(f"{Y}الشرح:{END} الأداة تحتاج صلاحيات Root لتنفيذ هذا النوع من الفحص (مثل فحص SYN في Nmap).")
+        print(f"{G}الحل:{END} شغل السكربت بـ {W}sudo{END} أو أضف sudo قبل الأمر.")
+    
+    elif "timeout" in error_msg.lower():
+        print(f"{Y}الشرح:{END} الخادم الهدف استغرق وقتاً طويلاً للرد. قد يكون هناك جدار حماية (Firewall) يمنعنا.")
+        print(f"{G}الحل:{END} تأكد من اتصال الـ VPN أو جرب إضافة {W}-Pn{END} للأمر.")
+    
+    else:
+        print(f"{Y}التفاصيل التقنية للخطأ:{END}\n{DIM}{error_msg}{END}")
 
 def run_cmd(cmd):
     try:
-        res = subprocess.run(cmd, shell=True, text=True, capture_output=True, timeout=120)
-        return res.stdout, res.returncode
-    except: return "ERROR", 1
-
-# ── المنهجية الذكية (Autonomous Logic) ─────────────────────────
+        # تشغيل الأمر وجلب المخرجات والخطأ
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout, stderr = process.communicate(timeout=180)
+        
+        if process.returncode != 0:
+            diagnose_error(cmd, stderr)
+            return None
+        return stdout
+    except Exception as e:
+        diagnose_error(cmd, str(e))
+        return None
 
 def smart_analyze(output, current_cmd, ip):
+    if not output: return None, None
+    out_low = output.lower()
     cmd_low = current_cmd.lower()
-    
-    # حالة 1: فشل العثور على ملفات (مثل 404 في robots.txt)
-    if "404 not found" in output.lower() or len(output.strip()) < 50:
-        if "robots.txt" in cmd_low:
-            explain("بما أن ملف robots.txt غير موجود، الخادم قد يعتمد على Virtual Hosts. سأقوم الآن بفحص الـ Subdomains المخفية.")
-            return f"ffuf -u http://{ip} -w /usr/share/wordlists/dirb/common.txt -H 'Host: FUZZ.target.thm' -fs 0", "فحص الـ Virtual Hosts لتجاوز صفحة 404"
-        
-        if "ffuf" in cmd_low:
-            explain("الفحص السطحي لم يعطِ نتائج. سأنتقل الآن للفحص العميق (Recursive) مع إضافة امتدادات ملفات برمجية.")
-            return f"ffuf -u http://{ip}/FUZZ -w /usr/share/wordlists/dirb/common.txt -e .php,.txt,.bak,.config -t 50", "بحث عن ملفات حساسة (.bak, .config)"
 
-    # حالة 2: تحليل مخرجات Nmap
-    if "nmap" in cmd_low:
+    # منطق الانتقال بناءً على النتائج
+    if "404 not found" in out_low:
+        explain("تحليل خبير", "بما أن الصفحة غير موجودة (404)، سأنتقل لفحص الـ Virtual Hosts لأن الهدف قد يعتمد على أسماء النطاقات.", C)
+        return f"ffuf -u http://{ip} -w /usr/share/wordlists/dirb/common.txt -H 'Host: FUZZ.contrabando.thm' -fs 0", "VHost Enumeration"
+
+    if "nmap" in cmd_low and "open" in out_low:
         ports = re.findall(r'(\d+)/tcp\s+open', output)
         if ports:
-            explain(f"وجدت بورتات مفتوحة: {ports}. سأبدأ بفحص الخدمات (Service Enumeration) لتبين الإصدارات والثغرات العامة.")
-            return f"nmap -sV -sC -p {','.join(ports)} {ip}", "فحص الإصدارات والسكربتات الافتراضية"
+            explain("تحليل خبير", f"تم العثور على منافذ مفتوحة {ports}. سنقوم الآن بفحص الخدمات بعمق لاكتشاف الإصدارات.", C)
+            return f"nmap -sV -sC -p {','.join(ports)} {ip}", "Deep Service Scan"
 
-    # حالة 3: إذا وجدت بورت 21 (FTP)
-    if "21/tcp" in output and "ftp" in output.lower():
-        explain("وجدنا منفذ FTP. سأحاول تسجيل الدخول كمجهول (Anonymous) وجلب قائمة الملفات آلياً.")
-        return f"nmap --script ftp-anon -p 21 {ip}", "محاولة دخول FTP مجهول"
+    if "21/tcp" in out_low:
+        explain("تحليل خبير", "بورت FTP مفتوح. سأقوم بفحصه للبحث عن Anonymous Login.", C)
+        return f"nmap --script ftp-anon -p 21 {ip}", "FTP Check"
 
-    # حالة التوقف أو النجاح
-    explain("المسار الحالي انتهى. أنصحك بفحص يدوي لثغرات Logic أو البحث عن Usernames في الويب.")
     return None, None
-
-# ── المحرك الرئيسي ──────────────────────────────────────
 
 def main():
     cls()
@@ -69,21 +84,28 @@ def main():
     ip = input(f"{C}▸ Target IP: {END}").strip()
     if not ip: return
 
-    # الخطوة الأولى: فحص ذكي وسريع
     current_cmd = f"nmap -F --min-rate 1000 {ip}"
-    reason = "مسح أولي سريع للبورتات النشطة"
+    reason = "مسح سريع للبورتات"
 
     while current_cmd:
-        explain(f"الهدف من هذه الخطوة: {reason}")
-        show_cmd(current_cmd)
+        explain("الخطوة التالية", f"{reason}", G)
+        print(f"{BOLD}# {current_cmd}{END}")
         
-        choice = input(f"\n{G}تشغيل الآن؟ (y/n): {END}").lower()
-        if choice == 'y':
-            output, code = run_cmd(current_cmd)
-            print(f"{DIM}{'─'*40}\n{output[:1000]}\n{'─'*40}{END}")
-            
-            # الانتقال الذكي
-            current_cmd, reason = smart_analyze(output, current_cmd, ip)
+        move = input(f"\n{W}تنفيذ؟ (y) / تخطي (n) / خروج (q): {END}").lower()
+        
+        if move == 'y':
+            output = run_cmd(current_cmd)
+            if output:
+                print(f"{DIM}{'─'*40}\n{output[:1000]}\n{'─'*40}{END}")
+                next_cmd, next_reason = smart_analyze(output, current_cmd, ip)
+                current_cmd, reason = next_cmd, next_reason
+            else:
+                # إذا فشل الأمر، لا نتوقف بل نقفز لمنهجية بديلة
+                explain("إجراء وقائي", "بسبب فشل الأمر السابق، سأقترح عليك مساراً بديلاً.", Y)
+                current_cmd, reason = smart_analyze("404 not found", current_cmd, ip)
+                
+        elif move == 'n':
+            current_cmd, reason = smart_analyze("404 not found", current_cmd, ip)
         else:
             break
 
