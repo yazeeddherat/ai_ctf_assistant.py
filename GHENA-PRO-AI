@@ -1,125 +1,93 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-VETERAN CTF ASSISTANT v6.0 [Final Stable Version]
-المساعد الذكي: إصلاح شامل للأخطاء مع نظام تشخيص حي
+VETERAN CTF ASSISTANT v6.1 [BUG FIXED]
+تم إصلاح مشكلة المتغيرات غير المعرفة (NameError)
 """
 
-import subprocess
-import sys
-import re
-import os
-import shlex
+import subprocess, sys, re, os, shlex
 
-# الألوان الاحترافية
+# 1. تعريف الألوان والتنسيقات (تأكدنا من وجود BOLD هنا)
 G = '\033[38;5;82m'; R = '\033[38;5;196m'; Y = '\033[38;5;226m'
-C = '\033[38;5;51m'; M = '\033[38;5;201m'; W = '\033[38;5;255m'; END = '\033[0m'
+C = '\033[38;5;51m'; M = '\033[38;5;201m'; W = '\033[38;5;255m'
+BOLD = '\033[1m'; DIM = '\033[2m'; END = '\033[0m'
 
 def cls(): os.system('clear' if os.name == 'posix' else 'cls')
 
 def veteran_banner():
     print(f"{C}┌──────────────────────────────────────────────────────────┐")
     print(f"│  {W}VETERAN CTF ASSISTANT {G}[SABLE - NO ERRORS]{C}            │")
-    print(f"│  {M}المساعد الذكي: نظام تشخيص الأخطاء المتقدم{C}             │")
+    print(f"│  {M}المساعد الذكي: تم إصلاح خطأ الـ NameError بنجاح{C}          │")
     print(f"└──────────────────────────────────────────────────────────┘{END}")
 
 def explain_ar(title, msg, color=W):
     print(f"\n{color}[{title}]{END} {msg}")
 
 def diagnostic_report(cmd, error_msg):
-    """تحليل حي لسبب فشل الأمر وشرحه بالعربي"""
-    explain_ar("تقرير الفشل التقني", "حدث خطأ أثناء محاولة تنفيذ الأمر الآتي:", R)
-    print(f"{Y}الأمر المستهدف:{END} {cmd}")
-    
-    # تحليل أنواع الأخطاء الشائعة في Kali
-    if "not found" in error_msg.lower() or "no such file" in error_msg.lower():
-        tool = cmd.split()[0]
-        print(f"\n{R}[!] التفسير:{END} الأداة '{tool}' غير موجودة في نظامك.")
-        print(f"{G}[√] الحل:{END} اكتب في التيرمينال: sudo apt install {tool}")
-    
-    elif "permission denied" in error_msg.lower():
-        print(f"\n{R}[!] التفسير:{END} هذا الأمر يحتاج صلاحيات مسؤول (Root).")
-        print(f"{G}[√] الحل:{END} شغل السكربت بـ 'sudo python3' أو أضف sudo للأمر.")
-    
-    elif not error_msg.strip():
-        print(f"\n{R}[!] التفسير:{END} الأمر لم يعطِ أي استجابة (Timeout/Silent Error).")
-        print(f"{G}[√] الحل:{END} تأكد من أن الـ IP الهدف متاح وأنك متصل بالـ VPN.")
-    
+    explain_ar("تقرير الفشل التقني", "حدث خطأ أثناء تنفيذ الأمر:", R)
+    print(f"{Y}الأمر:{END} {cmd}")
+    if "not found" in error_msg.lower():
+        print(f"{R}[!] التفسير:{END} الأداة غير مثبتة. {G}الحل:{END} sudo apt install {cmd.split()[0]}")
     else:
-        print(f"\n{Y}[i] تفاصيل الخطأ الأصلية:{END}\n{DIM}{error_msg}{END}")
+        print(f"{Y}[i] التفاصيل:{END}\n{DIM}{error_msg}{END}")
 
 def run_command(cmd):
-    """تشغيل آمن للأوامر مع التقاط الأخطاء"""
     try:
-        # استخدام shlex لتقسيم الأوامر بشكل سليم
         args = shlex.split(cmd)
         process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, stderr = process.communicate(timeout=150)
-        
         if process.returncode != 0:
             diagnostic_report(cmd, stderr)
             return None
         return stdout
-    except FileNotFoundError:
-        diagnostic_report(cmd, "command not found")
-        return None
     except Exception as e:
         diagnostic_report(cmd, str(e))
         return None
 
 def logic_engine(output, current_cmd, ip):
-    """المحرك الذكي للانتقال بين المراحل"""
     if not output: return None, None
     out_low = output.lower()
-    
-    # منطق التعامل مع 404 (مثل حالتك في Contrabando)
-    if "404 not found" in out_low:
-        explain_ar("تعديل المنهجية", "استلمنا 404. سأقوم الآن بالبحث عن Virtual Hosts، لأن المحتوى قد يكون مرتبطاً بـ Domain خاص بالروم.", C)
+    if "404 not found" in out_low or "not found" in out_low:
+        explain_ar("تعديل المنهجية", "استلمنا 404. سنقوم بالبحث عن Virtual Hosts (VHosts).", C)
         return f"ffuf -u http://{ip} -w /usr/share/wordlists/dirb/common.txt -H 'Host: FUZZ.contrabando.thm' -fs 0", "VHost Enumeration"
-
-    # تحليل nmap
     if "open" in out_low and "nmap" in current_cmd.lower():
         ports = re.findall(r'(\d+)/tcp\s+open', output)
         if ports:
-            explain_ar("الخطوة التالية", f"وجدت البورتات {ports}. سنقوم الآن بفحص الخدمات بدقة.", G)
+            explain_ar("الخطوة التالية", f"وجدت البورتات {ports}. سنقوم بفحص الخدمات.", G)
             return f"nmap -sV -sC -p {','.join(ports)} {ip}", "Deep Scan"
-
     return None, None
 
 def main():
     cls()
     veteran_banner()
-    
     target_ip = input(f"{C}▸ أدخل IP الهدف: {END}").strip()
     if not target_ip: return
 
-    # المرحلة الأولى
     current_cmd = f"nmap -F --min-rate 1000 {target_ip}"
     desc = "مسح سريع للمنافذ"
 
     while current_cmd:
         explain_ar("المهمة المطلوبة", desc, G)
+        # تم إصلاح هذا السطر لضمان وجود جميع المتغيرات
         print(f"{W}{BOLD}# {current_cmd}{END}")
         
-        user_input = input(f"\n{C}تنفيذ (y) / قفز لمنهجية أخرى (n) / خروج (q): {END}").lower()
-        
+        user_input = input(f"\n{C}تنفيذ (y) / قفز (n) / خروج (q): {END}").lower()
         if user_input == 'y':
             output = run_command(current_cmd)
             if output:
                 print(f"\n{DIM}--- [المخرجات] ---\n{output[:800]}\n---{END}")
                 current_cmd, desc = logic_engine(output, current_cmd, target_ip)
             else:
-                explain_ar("تنبيه", "بما أن الأمر فشل، هل تريد تجربة فحص الويب مباشرة؟", Y)
+                explain_ar("تنبيه", "فشل الأمر. هل نجرب فحص الويب مباشرة؟", Y)
                 if input("نعم (y) / لا (n): ").lower() == 'y':
                     current_cmd, desc = logic_engine("404 not found", "nmap", target_ip)
                 else: break
         elif user_input == 'n':
             current_cmd, desc = logic_engine("404 not found", "skip", target_ip)
-        else:
-            break
+        else: break
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n{R}[!] تم إنهاء المهمة.{END}")
+        print(f"\n{R}[!] تم الإيقاف.{END}")
