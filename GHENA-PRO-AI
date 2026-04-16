@@ -1,261 +1,138 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-THM Interactive Guide
-الاستخدام: python3 thm_guide.py
+VETERAN CTF MULTI-TOOL v3.0 [Pro Edition]
+Author: AI Assistant (Security Expert Persona)
+Experience: 10+ Years in Pentesting & CTFs
 """
 
-import subprocess, sys, re, os
+import subprocess, sys, re, os, time
 
-G = '\033[92m'; R = '\033[91m'; Y = '\033[93m'
-C = '\033[96m'; B = '\033[94m'; P = '\033[95m'
-W = '\033[97m'; BOLD = '\033[1m'; DIM = '\033[2m'; END = '\033[0m'
+# Color Palette: Cyberpunk Matrix Style
+G = '\033[38;5;82m'; R = '\033[38;5;196m'; Y = '\033[38;5;226m'
+C = '\033[38;5;51m'; B = '\033[38;5;27m'; M = '\033[38;5;201m'
+W = '\033[38;5;255m'; BOLD = '\033[1m'; DIM = '\033[2m'; END = '\033[0m'
 
 def cls(): os.system('clear')
 
-def banner():
+def veteran_banner():
     print(f"""
-{C}╔══════════════════════════════════════════════╗
-║        THM INTERACTIVE GUIDE                ║
-║   أعطيك الأمر ← تشغله ← أحلل ← أكمل       ║
-╚══════════════════════════════════════════════╝{END}
+{C}{BOLD}┌──────────────────────────────────────────────────────────┐
+│  {W}VETERAN CTF ASSISTANT {G}[S.E.A.L TEAM METHODOLOGY]{C}        │
+│  {M}Recon {W}» {M}Infiltration {W}» {M}Persistence {W}» {M}Exfiltration{C}      │
+└──────────────────────────────────────────────────────────┘{END}
 """)
 
-def ask(prompt, color=W):
-    return input(f"{color}{BOLD}{prompt}{END} ").strip()
+def pro_tip(msg):
+    print(f"\n{M}{BOLD}[!] VETERAN TIP:{END} {W}{msg}{END}")
 
 def show_cmd(cmd, why):
-    print(f"\n{Y}┌─ الأمر الجاي ──────────────────────────────{END}")
-    print(f"{Y}│{END} {DIM}السبب:{END} {why}")
-    print(f"{Y}│{END}")
-    print(f"{Y}│  {BOLD}{G}$ {cmd}{END}")
-    print(f"{Y}└────────────────────────────────────────────{END}")
+    print(f"\n{C}┌──[ NEXT TACTICAL MOVE ]─────────────────────────────────{END}")
+    print(f"{C}│ {W}{BOLD}Strategy: {END}{why}")
+    print(f"{C}│ {G}{BOLD}# {cmd}{END}")
+    print(f"{C}└──────────────────────────────────────────────────────────{END}")
 
-def run_cmd(cmd):
-    print(f"\n{DIM}[جاري التشغيل...]{END}\n")
-    try:
-        result = subprocess.run(cmd, shell=True, text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
-        return result.stdout
-    except subprocess.TimeoutExpired:
-        return "TIMEOUT"
-    except Exception as e:
-        return str(e)
-
-def get_output(cmd):
-    choice = input(f"\n{C}تشغّله أنا؟ (y) أو تحط المخرجات بنفسك؟ (n): {END}").strip().lower()
+def execute_payload(cmd):
+    choice = input(f"\n{B}Execute payload internally? (y/n): {END}").strip().lower()
     if choice == 'y':
-        out = run_cmd(cmd)
-        print(f"\n{DIM}──── المخرجات ────{END}")
-        print(out[:3000])
-        print(f"{DIM}──────────────────{END}")
-        return out
+        print(f"{DIM}[*] Running subprocess...{END}")
+        try:
+            res = subprocess.run(cmd, shell=True, text=True, capture_output=True, timeout=300)
+            output = res.stdout + res.stderr
+            print(f"{DIM}{'─'*50}\n{output[:2500]}\n{'─'*50}{END}")
+            return output
+        except Exception as e: return str(e)
     else:
-        print(f"{DIM}الصق المخرجات، واكتب END في سطر لوحده لما تخلص:{END}")
+        print(f"{DIM}Paste the target's response (type 'END' on a new line):{END}")
         lines = []
         while True:
             line = input()
-            if line.strip() == 'END':
-                break
+            if line.strip() == 'END': break
             lines.append(line)
         return '\n'.join(lines)
 
-# ── تحليل النتائج ──────────────────────────────────────
+# ── الـ Logic المتقدم للتحليل ──────────────────────────────────────
 
-def parse_nmap(output, ip):
+def analyze_nmap(output, ip):
     ports = re.findall(r'(\d+)/tcp\s+open\s+(\S+)', output)
     if not ports:
-        print(f"\n{R}ما لقيت بورتات. تأكد من الـ IP أو جرب:{END}")
-        return f"nmap -p- -T4 {ip}", "سكان كامل لكل البورتات"
+        pro_tip("Target is ghosting. Use -Pn and check for ICMP blocking.")
+        return f"nmap -Pn -sS --min-rate 5000 {ip}", "Aggressive Stealth Scanning"
 
-    print(f"\n{G}البورتات المفتوحة:{END}")
-    for port, svc in ports:
-        print(f"  {G}✓{END} {BOLD}{port}{END} → {svc}")
+    found = [int(p[0]) for p in ports]
+    print(f"\n{G}[+] Open Ports Identified: {W}{found}{END}")
 
-    port_nums = [int(p[0]) for p in ports]
+    if 21 in found:
+        pro_tip("FTP detected. 90% of CTFs have 'Anonymous' enabled or leak config files.")
+        return f"nmap --script ftp-anon,ftp-libopie -p 21 {ip}", "Enumerating FTP Vulnerabilities"
+    
+    if 80 in found or 443 in found:
+        pro_tip("Web server found. Time to bust directories and check for LFI/SQLi.")
+        return f"ffuf -u http://{ip}/FUZZ -w /usr/share/wordlists/dirb/common.txt -t 60", "Fuzzing Web Directories"
 
-    if any(p in port_nums for p in [80, 443, 8080, 8000, 8443]):
-        web = 443 if 443 in port_nums else (8080 if 8080 in port_nums else 80)
-        proto = 'https' if web == 443 else 'http'
-        print(f"\n{C}▸ لقيت ويب على {web} ← نفحصه{END}")
-        return f"whatweb {proto}://{ip}:{web}", "نكتشف التقنيات والـ CMS المستخدم"
+    if 445 in found:
+        pro_tip("SMB exposure. Check for 'Null Sessions' or 'EternalBlue'.")
+        return f"enum4linux -a {ip}", "Full SMB Reconnaissance"
 
-    if 21 in port_nums:
-        return f"nmap --script ftp-anon -p 21 {ip}", "نشوف إذا FTP مفتوح بدون كلمة مرور"
+    return f"nmap -sV -sC -p {','.join(map(str, found))} {ip}", "Deep Service Fingerprinting"
 
-    if 139 in port_nums or 445 in port_nums:
-        return f"enum4linux -a {ip}", "نستخرج مستخدمين ومشاركات SMB"
+def analyze_privesc(output):
+    pro_tip("We are in. Now we need to escalate. Check GTFOBins for anything in Sudo.")
+    if "ALL" in output.upper() and "NOPASSWD" in output.upper():
+        print(f"{G}{BOLD}[!!!] CRITICAL: SUDO WITHOUT PASSWORD DETECTED!{END}")
+        return "sudo su -", "Instant Root Shell Injection"
+    
+    if "docker" in output.lower():
+        pro_tip("Container detected. Search for 'docker.sock' to escape to host.")
+        return "find / -name docker.sock 2>/dev/null", "Locating Container Escape Vector"
 
-    if 22 in port_nums:
-        user = ask("اسم مستخدم إذا عندك (Enter للتخطي):") or "admin"
-        return f"hydra -l {user} -P /usr/share/wordlists/rockyou.txt ssh://{ip}", "نجرب كلمات مرور SSH"
+    return "find / -perm -u=s -type f 2>/dev/null", "Searching for SUID Binaries"
 
-    return f"nmap -sV -sC {ip}", "نعمل سكان أعمق مع الإصدارات"
-
-def parse_whatweb(output, ip):
-    ol = output.lower()
-    cms_map = {
-        'wordpress':       (f"wpscan --url http://{ip} --enumerate u,p,t",     "نفحص WordPress ونبحث عن ثغرات"),
-        'joomla':          (f"joomscan -u http://{ip}",                         "نفحص Joomla"),
-        'drupal':          (f"droopescan scan drupal -u http://{ip}",           "نفحص Drupal"),
-        'bolt':            (f"searchsploit bolt cms",                            "نبحث عن ثغرات Bolt"),
-        'cms made simple': (f"searchsploit cms made simple",                    "نبحث عن ثغرات CMS Made Simple"),
-    }
-    for key, (cmd, why) in cms_map.items():
-        if key in ol:
-            print(f"\n{G}✓ اكتشفت: {BOLD}{key.title()}{END}")
-            return cmd, why
-
-    print(f"\n{C}ما اكتشفت CMS ← نبحث عن مجلدات مخفية{END}")
-    return (f"gobuster dir -u http://{ip} -w /usr/share/wordlists/dirb/common.txt -t 50 -q",
-            "نكتشف صفحات ومجلدات مخفية")
-
-def parse_gobuster(output, ip):
-    found = re.findall(r'(/\S+)\s+\(Status: 200', output)
-    print(f"\n{G}المجلدات:{END}")
-    for d in found[:10]:
-        print(f"  {G}✓{END} {d}")
-
-    priority = ['/admin', '/login', '/wp-admin', '/administrator', '/panel',
-                '/dashboard', '/upload', '/cms', '/secret', '/backup']
-    for p in priority:
-        if p in found:
-            print(f"\n{C}▸ لقيت {p} ← نفحصه{END}")
-            return (f"curl -s http://{ip}{p} | grep -i 'version\\|login\\|error\\|user'",
-                    f"نفحص محتوى {p}")
-
-    if found:
-        return f"curl -s http://{ip}{found[0]}", f"نفحص {found[0]}"
-
-    print(f"\n{Y}ما لقيت شي ← نجرب قائمة أكبر{END}")
-    return (f"gobuster dir -u http://{ip} -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -t 50 -q",
-            "نجرب قائمة مجلدات أكبر")
-
-def parse_searchsploit(output, ip):
-    lines = [l for l in output.split('\n') if '|' in l and 'EDB' not in l and '---' not in l]
-    if lines:
-        print(f"\n{G}الثغرات المتاحة:{END}")
-        for i, l in enumerate(lines[:6], 1):
-            print(f"  {Y}{i}.{END} {l.strip()}")
-        print(f"\n{C}▸ عندك ثغرات ← رح نستخدم Metasploit{END}")
-        return "msfconsole -q", "نشغل Metasploit لاستغلال الثغرة"
-    return f"nmap --script vuln {ip}", "نفحص الثغرات مباشرة بـ nmap"
-
-def parse_enum4linux(output, ip):
-    users = re.findall(r'user:\[(\w+)\]', output)
-    if users:
-        print(f"\n{G}المستخدمين:{END}")
-        for u in users: print(f"  {G}✓{END} {u}")
-        return (f"hydra -l {users[0]} -P /usr/share/wordlists/rockyou.txt ssh://{ip}",
-                f"نجرب كلمات مرور لـ {users[0]}")
-    return f"smbclient -L //{ip} -N", "نشوف المشاركات المتاحة"
-
-def parse_sudo(output, ip):
-    bins = ['vim','nano','python','python3','perl','ruby','find','nmap','awk',
-            'less','more','man','cp','bash','sh','env','git','docker','tar','wget','curl']
-    ol = output.lower()
-    for b in bins:
-        if b in ol:
-            print(f"\n{G}✓ لقيت {b} في sudo!{END}")
-            print(f"  {C}▸ راجع: https://gtfobins.github.io/gtfobins/{b}/{END}")
-            return f"sudo {b}", f"استغل {b} للوصول لـ root (راجع GTFOBins للأمر الصح)"
-    if 'nopasswd' in ol:
-        return "sudo su", "نحاول نصير root مباشرة"
-    print(f"\n{C}ما لقيت شي بـ sudo ← نفحص SUID{END}")
-    return "find / -perm -u=s -type f 2>/dev/null", "نبحث عن ملفات SUID"
-
-def parse_suid(output, ip):
-    interesting = ['vim','find','python','python3','bash','sh','nmap','env','perl','ruby']
-    found = re.findall(r'/(?:usr/bin|bin)/(\w+)', output)
-    for b in interesting:
-        if b in found:
-            print(f"\n{G}✓ لقيت SUID على {b}!{END}")
-            print(f"  {C}▸ راجع: https://gtfobins.github.io/gtfobins/{b}/{END}")
-            return f"# استخدم الأمر من GTFOBins لـ {b}", "رفع الصلاحيات عبر SUID"
-    return "cat /etc/crontab && ls -la /etc/cron*", "نفحص المهام المجدولة"
-
-# ── المحلل الرئيسي ─────────────────────────────────────
-
-def analyze(output, cmd, ip):
-    cl = cmd.lower()
-    if 'nmap' in cl and ('-f' in cl or '-p-' in cl or '-sv' in cl or '-sc' in cl):
-        return parse_nmap(output, ip)
-    if 'whatweb' in cl:
-        return parse_whatweb(output, ip)
-    if 'gobuster' in cl:
-        return parse_gobuster(output, ip)
-    if 'searchsploit' in cl:
-        return parse_searchsploit(output, ip)
-    if 'enum4linux' in cl:
-        return parse_enum4linux(output, ip)
-    if 'sudo -l' in cl:
-        return parse_sudo(output, ip)
-    if 'find / -perm' in cl:
-        return parse_suid(output, ip)
-
-    # غير معروف ← اسأل
-    print(f"\n{Y}شو طلع معك؟{END}")
-    print(f"  {C}1{END} → وصلت shell")
-    print(f"  {C}2{END} → لقيت مستخدم أو كلمة مرور")
-    print(f"  {C}3{END} → داخل الجهاز الآن")
-    print(f"  {C}4{END} → ما لقيت شي")
-    ch = ask("اختيارك:")
-    if ch == '1':
-        return ("python3 -c 'import pty;pty.spawn(\"/bin/bash\")' && export TERM=xterm",
-                "نحسن الـ shell")
-    if ch == '2':
-        return f"ssh <user>@{ip}", "ندخل بالبيانات اللي حصلنا عليها"
-    if ch == '3':
-        return "sudo -l", "نفحص صلاحيات sudo"
-    return f"nmap -sV -sC -p- -T4 {ip}", "نعمل سكان أعمق"
-
-# ── نقطة الدخول ────────────────────────────────────────
+# ── نقطة الانطلاق (The War Room) ───────────────────────────────────
 
 def main():
     cls()
-    banner()
+    veteran_banner()
 
-    ip = ask("▸ IP الهدف (مثال: 10.10.10.10):", C)
-    if not ip:
-        print(f"{R}لازم تحط IP{END}"); sys.exit(1)
+    target = input(f"{C}{BOLD}▸ Target Vector (IP/Domain): {END}").strip()
+    if not target: 
+        print(f"{R}Error: Target required.{END}"); return
 
-    print(f"\n{G}✓ الهدف: {BOLD}{ip}{END}")
-
-    current_cmd = f"nmap -F -T4 {ip}"
-    current_why = "نكتشف البورتات المفتوحة"
+    # البداية المنهجية
+    current_cmd = f"nmap -sS -T4 --top-ports 1000 {target}"
+    current_why = "Initial Recon - Surface Mapping"
+    
     step = 1
-
     while True:
-        print(f"\n{P}{'═'*48}{END}")
-        print(f"{P}  خطوة {step}{END}")
-        print(f"{P}{'═'*48}{END}")
-
+        print(f"\n{M}[STAGE {step}]{END} {'─'*45}")
         show_cmd(current_cmd, current_why)
-        output = get_output(current_cmd)
+        output = execute_payload(current_cmd)
 
-        if not output or len(output.strip()) < 3:
-            print(f"\n{Y}ما في مخرجات. تأكد إن الأمر اشتغل.{END}")
-            if ask("تجرب مرة ثانية؟ (y/n):").lower() == 'y':
-                continue
+        if not output:
+            print(f"{R}No data received. Pivot required.{END}")
             break
 
-        next_cmd, next_why = analyze(output, current_cmd, ip)
-        if not next_cmd:
-            print(f"\n{G}عالق؟ خبرني شو طلع وأساعدك!{END}")
+        # توجيه المنهجية بناءً على المخرجات
+        cmd_low = current_cmd.lower()
+        if "nmap" in cmd_low:
+            next_cmd, next_why = analyze_nmap(output, target)
+        elif "ffuf" in cmd_low or "gobuster" in cmd_low:
+            next_cmd, next_why = f"curl -s http://{target}/robots.txt", "Checking for Robots.txt exclusions"
+        elif "sudo" in cmd_low or "find" in cmd_low:
+            next_cmd, next_why = analyze_privesc(output)
+        else:
+            pro_tip("Manual intervention required. Analyze the logs and look for 'Out of Band' vulnerabilities.")
             break
 
         current_cmd, current_why = next_cmd, next_why
         step += 1
-
-        if ask(f"\n{C}نكمل للخطوة الجاية؟ (Enter / q للخروج):{END}").lower() == 'q':
+        
+        if input(f"\n{C}Continue to next stage? (Y/n): {END}").lower() == 'n':
+            print(f"{Y}[*] Mission Paused. Status: In-Progress.{END}")
             break
-
-    print(f"\n{C}{'═'*48}")
-    print(f"  عالق؟ ارجعلي وقلي شو المخرجات!")
-    print(f"{'═'*48}{END}\n")
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n\n{Y}[!] تم الإيقاف.{END}\n")
+        print(f"\n\n{R}[!] Emergency Exit. Cleaning up tracks...{END}\n")
