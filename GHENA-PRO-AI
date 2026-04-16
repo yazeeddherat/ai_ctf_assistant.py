@@ -1,138 +1,91 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-VETERAN CTF MULTI-TOOL v3.0 [Pro Edition]
-Author: AI Assistant (Security Expert Persona)
-Experience: 10+ Years in Pentesting & CTFs
+VETERAN CTF ASSISTANT v4.0 [Autonomous Logic]
+Experience: 10+ Years - Multi-Vector Switching
 """
 
-import subprocess, sys, re, os, time
+import subprocess, sys, re, os
 
-# Color Palette: Cyberpunk Matrix Style
+# Colors
 G = '\033[38;5;82m'; R = '\033[38;5;196m'; Y = '\033[38;5;226m'
-C = '\033[38;5;51m'; B = '\033[38;5;27m'; M = '\033[38;5;201m'
-W = '\033[38;5;255m'; BOLD = '\033[1m'; DIM = '\033[2m'; END = '\033[0m'
+C = '\033[38;5;51m'; M = '\033[38;5;201m'; W = '\033[38;5;255m'; END = '\033[0m'
 
 def cls(): os.system('clear')
 
 def veteran_banner():
-    print(f"""
-{C}{BOLD}┌──────────────────────────────────────────────────────────┐
-│  {W}VETERAN CTF ASSISTANT {G}[S.E.A.L TEAM METHODOLOGY]{C}        │
-│  {M}Recon {W}» {M}Infiltration {W}» {M}Persistence {W}» {M}Exfiltration{C}      │
-└──────────────────────────────────────────────────────────┘{END}
-""")
+    print(f"{C}┌──────────────────────────────────────────────────────────┐")
+    print(f"│  {W}VETERAN CTF AUTO-LOGIC {G}[Expert Methodology]{C}          │")
+    print(f"└──────────────────────────────────────────────────────────┘{END}")
 
-def pro_tip(msg):
-    print(f"\n{M}{BOLD}[!] VETERAN TIP:{END} {W}{msg}{END}")
+def explain(msg):
+    print(f"\n{M}[المنهجية التكتيكية]{END} {W}{msg}{END}")
 
-def show_cmd(cmd, why):
-    print(f"\n{C}┌──[ NEXT TACTICAL MOVE ]─────────────────────────────────{END}")
-    print(f"{C}│ {W}{BOLD}Strategy: {END}{why}")
-    print(f"{C}│ {G}{BOLD}# {cmd}{END}")
-    print(f"{C}└──────────────────────────────────────────────────────────{END}")
+def show_cmd(cmd):
+    print(f"{G}# {cmd}{END}")
 
-def execute_payload(cmd):
-    choice = input(f"\n{B}Execute payload internally? (y/n): {END}").strip().lower()
-    if choice == 'y':
-        print(f"{DIM}[*] Running subprocess...{END}")
-        try:
-            res = subprocess.run(cmd, shell=True, text=True, capture_output=True, timeout=300)
-            output = res.stdout + res.stderr
-            print(f"{DIM}{'─'*50}\n{output[:2500]}\n{'─'*50}{END}")
-            return output
-        except Exception as e: return str(e)
-    else:
-        print(f"{DIM}Paste the target's response (type 'END' on a new line):{END}")
-        lines = []
-        while True:
-            line = input()
-            if line.strip() == 'END': break
-            lines.append(line)
-        return '\n'.join(lines)
+def run_cmd(cmd):
+    try:
+        res = subprocess.run(cmd, shell=True, text=True, capture_output=True, timeout=120)
+        return res.stdout, res.returncode
+    except: return "ERROR", 1
 
-# ── الـ Logic المتقدم للتحليل ──────────────────────────────────────
+# ── المنهجية الذكية (Autonomous Logic) ─────────────────────────
 
-def analyze_nmap(output, ip):
-    ports = re.findall(r'(\d+)/tcp\s+open\s+(\S+)', output)
-    if not ports:
-        pro_tip("Target is ghosting. Use -Pn and check for ICMP blocking.")
-        return f"nmap -Pn -sS --min-rate 5000 {ip}", "Aggressive Stealth Scanning"
-
-    found = [int(p[0]) for p in ports]
-    print(f"\n{G}[+] Open Ports Identified: {W}{found}{END}")
-
-    if 21 in found:
-        pro_tip("FTP detected. 90% of CTFs have 'Anonymous' enabled or leak config files.")
-        return f"nmap --script ftp-anon,ftp-libopie -p 21 {ip}", "Enumerating FTP Vulnerabilities"
+def smart_analyze(output, current_cmd, ip):
+    cmd_low = current_cmd.lower()
     
-    if 80 in found or 443 in found:
-        pro_tip("Web server found. Time to bust directories and check for LFI/SQLi.")
-        return f"ffuf -u http://{ip}/FUZZ -w /usr/share/wordlists/dirb/common.txt -t 60", "Fuzzing Web Directories"
+    # حالة 1: فشل العثور على ملفات (مثل 404 في robots.txt)
+    if "404 not found" in output.lower() or len(output.strip()) < 50:
+        if "robots.txt" in cmd_low:
+            explain("بما أن ملف robots.txt غير موجود، الخادم قد يعتمد على Virtual Hosts. سأقوم الآن بفحص الـ Subdomains المخفية.")
+            return f"ffuf -u http://{ip} -w /usr/share/wordlists/dirb/common.txt -H 'Host: FUZZ.target.thm' -fs 0", "فحص الـ Virtual Hosts لتجاوز صفحة 404"
+        
+        if "ffuf" in cmd_low:
+            explain("الفحص السطحي لم يعطِ نتائج. سأنتقل الآن للفحص العميق (Recursive) مع إضافة امتدادات ملفات برمجية.")
+            return f"ffuf -u http://{ip}/FUZZ -w /usr/share/wordlists/dirb/common.txt -e .php,.txt,.bak,.config -t 50", "بحث عن ملفات حساسة (.bak, .config)"
 
-    if 445 in found:
-        pro_tip("SMB exposure. Check for 'Null Sessions' or 'EternalBlue'.")
-        return f"enum4linux -a {ip}", "Full SMB Reconnaissance"
+    # حالة 2: تحليل مخرجات Nmap
+    if "nmap" in cmd_low:
+        ports = re.findall(r'(\d+)/tcp\s+open', output)
+        if ports:
+            explain(f"وجدت بورتات مفتوحة: {ports}. سأبدأ بفحص الخدمات (Service Enumeration) لتبين الإصدارات والثغرات العامة.")
+            return f"nmap -sV -sC -p {','.join(ports)} {ip}", "فحص الإصدارات والسكربتات الافتراضية"
 
-    return f"nmap -sV -sC -p {','.join(map(str, found))} {ip}", "Deep Service Fingerprinting"
+    # حالة 3: إذا وجدت بورت 21 (FTP)
+    if "21/tcp" in output and "ftp" in output.lower():
+        explain("وجدنا منفذ FTP. سأحاول تسجيل الدخول كمجهول (Anonymous) وجلب قائمة الملفات آلياً.")
+        return f"nmap --script ftp-anon -p 21 {ip}", "محاولة دخول FTP مجهول"
 
-def analyze_privesc(output):
-    pro_tip("We are in. Now we need to escalate. Check GTFOBins for anything in Sudo.")
-    if "ALL" in output.upper() and "NOPASSWD" in output.upper():
-        print(f"{G}{BOLD}[!!!] CRITICAL: SUDO WITHOUT PASSWORD DETECTED!{END}")
-        return "sudo su -", "Instant Root Shell Injection"
-    
-    if "docker" in output.lower():
-        pro_tip("Container detected. Search for 'docker.sock' to escape to host.")
-        return "find / -name docker.sock 2>/dev/null", "Locating Container Escape Vector"
+    # حالة التوقف أو النجاح
+    explain("المسار الحالي انتهى. أنصحك بفحص يدوي لثغرات Logic أو البحث عن Usernames في الويب.")
+    return None, None
 
-    return "find / -perm -u=s -type f 2>/dev/null", "Searching for SUID Binaries"
-
-# ── نقطة الانطلاق (The War Room) ───────────────────────────────────
+# ── المحرك الرئيسي ──────────────────────────────────────
 
 def main():
     cls()
     veteran_banner()
+    ip = input(f"{C}▸ Target IP: {END}").strip()
+    if not ip: return
 
-    target = input(f"{C}{BOLD}▸ Target Vector (IP/Domain): {END}").strip()
-    if not target: 
-        print(f"{R}Error: Target required.{END}"); return
+    # الخطوة الأولى: فحص ذكي وسريع
+    current_cmd = f"nmap -F --min-rate 1000 {ip}"
+    reason = "مسح أولي سريع للبورتات النشطة"
 
-    # البداية المنهجية
-    current_cmd = f"nmap -sS -T4 --top-ports 1000 {target}"
-    current_why = "Initial Recon - Surface Mapping"
-    
-    step = 1
-    while True:
-        print(f"\n{M}[STAGE {step}]{END} {'─'*45}")
-        show_cmd(current_cmd, current_why)
-        output = execute_payload(current_cmd)
-
-        if not output:
-            print(f"{R}No data received. Pivot required.{END}")
-            break
-
-        # توجيه المنهجية بناءً على المخرجات
-        cmd_low = current_cmd.lower()
-        if "nmap" in cmd_low:
-            next_cmd, next_why = analyze_nmap(output, target)
-        elif "ffuf" in cmd_low or "gobuster" in cmd_low:
-            next_cmd, next_why = f"curl -s http://{target}/robots.txt", "Checking for Robots.txt exclusions"
-        elif "sudo" in cmd_low or "find" in cmd_low:
-            next_cmd, next_why = analyze_privesc(output)
-        else:
-            pro_tip("Manual intervention required. Analyze the logs and look for 'Out of Band' vulnerabilities.")
-            break
-
-        current_cmd, current_why = next_cmd, next_why
-        step += 1
+    while current_cmd:
+        explain(f"الهدف من هذه الخطوة: {reason}")
+        show_cmd(current_cmd)
         
-        if input(f"\n{C}Continue to next stage? (Y/n): {END}").lower() == 'n':
-            print(f"{Y}[*] Mission Paused. Status: In-Progress.{END}")
+        choice = input(f"\n{G}تشغيل الآن؟ (y/n): {END}").lower()
+        if choice == 'y':
+            output, code = run_cmd(current_cmd)
+            print(f"{DIM}{'─'*40}\n{output[:1000]}\n{'─'*40}{END}")
+            
+            # الانتقال الذكي
+            current_cmd, reason = smart_analyze(output, current_cmd, ip)
+        else:
             break
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print(f"\n\n{R}[!] Emergency Exit. Cleaning up tracks...{END}\n")
+    main()
