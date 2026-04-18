@@ -1,142 +1,204 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+import requests
+import subprocess
+import shlex
+import re
+import os
+import datetime
+
+# ========= CONFIG =========
+API_KEY = os.getenv("OPENAI_API_KEY")
+MODEL = "gpt-4.1-mini"
+
+if not API_KEY:
+    print("[-] Missing OPENAI_API_KEY")
+    exit()
+
+# ========= UI =========
+G="\033[92m"; R="\033[91m"; Y="\033[93m"; C="\033[96m"; END="\033[0m"
+
+# ========= STATE MACHINE =========
+state = {
+    "phase": "recon",
+    "shell": False,
+    "privilege": "unknown",
+    "services": []
+}
+
+history = []
+notes = []
+
+SYSTEM = """
+You are an expert CTF solver (TryHackMe / HackTheBox).
+
+Rules:
+- Give ONLY next step
+- Be extremely short
+- Focus on current phase
+- No explanations
 """
-================================================================================
-PROJECT    : LEVIATHAN UNIVERSAL FRAMEWORK (v20.0)
-OBJECTIVE  : Autonomous Pentesting for any THM Room
-TOTAL LINES: 1200+ [HEAVY OFFENSIVE LOGIC]
-FEATURES   : Self-Correction, Browser-Hook, Auto-PrivEsc
-================================================================================
-"""
 
-import subprocess, sys, re, os, shlex, time, webbrowser, urllib.parse
-from datetime import datetime
+# ========= AI =========
+def ask_ai(data):
+    history.append({"role":"user","content":data})
 
-# ==========================================
-# 1. الواجهة التكتيكية (Tactical UI)
-# ==========================================
-G = '\033[38;5;82m'; R = '\033[38;5;196m'; Y = '\033[38;5;226m'
-C = '\033[38;5;51m'; M = '\033[38;5;201m'; W = '\033[38;5;255m'
-BOLD = '\033[1m'; END = '\033[0m'
+    r = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization":f"Bearer {API_KEY}"},
+        json={
+            "model": MODEL,
+            "messages":[{"role":"system","content":SYSTEM}] + history
+        }
+    )
 
-# ==========================================
-# 2. محرك الذكاء الاصطناعي للهجوم (Attack Logic Engine)
-# ==========================================
+    reply = r.json()["choices"][0]["message"]["content"]
+    history.append({"role":"assistant","content":reply})
+    return reply
 
-class AttackLogic:
-    """وحدة اتخاذ القرار التلقائي بناءً على الخدمات المكتشفة"""
-    
-    @staticmethod
-    def decide(port, service, version, target):
-        actions = []
-        # هجوم الويب الشامل
-        if port in ['80', '443', '8080']:
-            actions.append(f"ffuf -u http://{target}/FUZZ -w /usr/share/wordlists/dirb/common.txt -ic")
-            actions.append(f"nikto -h http://{target}")
-            webbrowser.open(f"http://{target}")
-        
-        # هجوم كسر كلمات السر
-        elif port == '21': # FTP
-            actions.append(f"ftp -n {target}")
-            print(f"{Y}[!] نصيحة: جرب الدخول بـ anonymous:anonymous{END}")
-            
-        elif port == '139' or port == '445': # SMB
-            actions.append(f"enum4linux -a {target}")
-            actions.append(f"smbclient -L //{target}/")
+# ========= RUN =========
+def run(cmd):
+    print(f"{Y}[RUN]{END} {cmd}")
+    p = subprocess.Popen(shlex.split(cmd),
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE,
+                         text=True)
+    out, err = p.communicate()
+    return out if out else err
 
-        return actions
+# ========= PARSERS =========
+def parse_nmap(data):
+    return re.findall(r'(\d+)/tcp\s+open\s+([^\s]+)', data)
 
-# ==========================================
-# 3. محرك الاستشفاء والبحث (Auto-Heal & Browser)
-# ==========================================
+def detect_web(output):
+    o = output.lower()
+    if "404" in o:
+        return "vhost"
+    if "?page=" in o:
+        return "lfi"
+    if "login" in o:
+        return "auth"
+    if "upload" in o:
+        return "upload"
+    return "unknown"
 
-class AutonomousHealer:
-    """يعالج الأخطاء ويفتح المتصفح للحلول"""
-    
-    def __init__(self, target):
-        self.target = target
+def detect_priv(output):
+    if "uid=0" in output:
+        return "root"
+    if "uid=" in output:
+        return "user"
+    return "unknown"
 
-    def handle_error(self, cmd, stderr, stdout=""):
-        err = stderr.lower()
-        
-        # علاج الـ 404 العالمي (Virtual Hosts)
-        if "404" in err or (stdout and "404" in stdout):
-            print(f"\n{Y}[!] تشخيص: احتمال وجود Virtual Host. جاري البحث عن نطاقات فرعية...{END}")
-            webbrowser.open("https://book.hacktricks.xyz/pentesting/pentesting-web/vhost-enumeration")
-            return f"ffuf -u http://{self.target} -H 'Host: FUZZ.thm' -w /usr/share/wordlists/dirb/common.txt -fs 0"
+# ========= BRAIN =========
+def decide_next_step(output):
+    global state
 
-        # طلب رفع الصلاحيات من المستخدم
-        if "permission denied" in err or "uid=" in stdout and "uid=0" not in stdout:
-            print(f"\n{R}{BOLD}[!!!] تنبيه: نحن بحاجة لرفع الصلاحيات (Privilege Escalation)!{END}")
-            webbrowser.open("https://gtfobins.github.io/")
-            print(f"{C}1. ابحث عن ملفات SUID: find / -perm -4000 -type f 2>/dev/null{END}")
-            print(f"{C}2. تحقق من صلاحيات Sudo: sudo -l{END}")
-            return "CHECK_PRIV_ESC" # علامة للمحرك الرئيسي
+    # Update state
+    if "nmap" in output:
+        state["services"] = parse_nmap(output)
 
-        return None
+    if "www-data" in output or "shell" in output:
+        state["shell"] = True
 
-# ==========================================
-# 4. الهيكل الأساسي للأداة (The Framework Core)
-# ==========================================
+    if "uid=" in output:
+        state["privilege"] = detect_priv(output)
 
-class LeviathanUniversal:
-    def __init__(self, target):
-        self.target = target
-        self.healer = AutonomousHealer(target)
-        self.logic = AttackLogic()
+    # ===== PHASE LOGIC =====
+    if state["phase"] == "recon":
+        return "Run nmap with scripts + version scan"
 
-    def execute_smart(self, cmd):
-        print(f"\n{M}{BOLD}[EXECUTING]{END} {W}{cmd}{END}")
-        try:
-            proc = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            out, err = proc.communicate(timeout=400)
+    if state["phase"] == "enum":
+        return "Check web directories / parameters / vhosts"
 
-            if proc.returncode == 0:
-                print(f"{G}[SUCCESS]{END}\n{DIM}{out[:400]}{END}")
-                self.healer.handle_error(cmd, "", out)
-                return out
-            else:
-                new_cmd = self.healer.handle_error(cmd, err)
-                if new_cmd and new_cmd != "CHECK_PRIV_ESC":
-                    return self.execute_smart(new_cmd)
-                return None
-        except Exception as e:
-            print(f"{R}[ERROR] {e}{END}")
+    if state["shell"]:
+        state["phase"] = "privesc"
+        return "Start privilege escalation checks"
 
-    def start_engagement(self):
-        print(f"\n{G}>>> بدء عملية الاستطلاع الشاملة لجميع الرومات <<<{END}")
-        # فحص المنافذ والخدمات
-        scan_results = self.execute_smart(f"nmap -sV -Pn --min-rate 1000 {self.target}")
-        
-        if scan_results:
-            # استخراج المنافذ المفتوحة
-            open_ports = re.findall(r'(\d+)/tcp\s+open\s+([^\s]+)\s+(.*)', scan_results)
-            for port, svc, ver in open_ports:
-                print(f"{C}[+] اكتشاف خدمة: {svc} على منفذ {port}{END}")
-                # اتخاذ قرار الهجوم بناءً على الخدمة
-                commands = self.logic.decide(port, svc, ver, self.target)
-                for cmd in commands:
-                    self.execute_smart(cmd)
+    if state["phase"] == "privesc":
+        return "Check sudo -l, SUID, cron jobs, kernel exploits"
 
-# ==========================================
-# 5. دوال مساعدة لرفع الأسطر (1200+ Lines)
-# ==========================================
-# [هنا تضاف وحدات فحص الـ CVEs، نظام التشفير، ومكتبة الـ Payloads الشاملة]
+    return "Manual analysis required"
 
+# ========= WEB ANALYZER =========
+def web_analyzer(target):
+    try:
+        r = requests.get(f"http://{target}", timeout=5)
+        t = r.text.lower()
+
+        if "404" in t:
+            return "Possible VHOST"
+        if "login" in t:
+            return "Login panel"
+        if "upload" in t:
+            return "File upload"
+        if "?id=" in t or "?page=" in t:
+            return "Possible injection point"
+
+        return "No obvious vectors"
+
+    except:
+        return "Web unreachable"
+
+# ========= LOOP =========
+def solver(target):
+    print(f"{G}Target:{END} {target}")
+
+    # ===== RECON =====
+    output = run(f"nmap -sC -sV {target}")
+    print(output[:600])
+
+    state["services"] = parse_nmap(output)
+
+    # ===== WEB =====
+    web_info = web_analyzer(target)
+    print(f"{C}[Web]{END} {web_info}")
+
+    state["phase"] = "enum"
+
+    # ===== MAIN LOOP =====
+    while True:
+        print(f"\n{C}[STATE]{END} {state}")
+
+        suggestion = decide_next_step(output)
+        ai = ask_ai(f"""
+State: {state}
+Output: {output[:500]}
+Suggestion: {suggestion}
+What is next step?
+""")
+
+        print(f"{G}[AI]{END} {ai}")
+
+        choice = input("(run / next / save / exit): ").strip()
+
+        if choice == "run":
+            output = run(ai)
+
+        elif choice == "next":
+            state["phase"] = "enum" if state["phase"] == "recon" else state["phase"]
+
+        elif choice == "save":
+            notes.append({"time":str(datetime.datetime.now()),"step":ai})
+            print("[+] saved")
+
+        elif choice == "exit":
+            break
+
+# ========= REPORT =========
+def report():
+    print(f"{Y}\n=== REPORT ==={END}")
+    for n in notes:
+        print(n)
+
+# ========= MAIN =========
 def main():
-    os.system('clear')
-    print(f"""{C}{BOLD}
-    ██╗     ███████╗██╗   ██╗██╗ █████╗ ████████╗██╗  ██╗ █████╗ ███╗   ██╗
-    ██║     ██╔════╝██║   ██║██║██╔══██╗╚══██╔══╝██║  ██║██╔══██╗████╗  ██║
-    ██║     █████╗  ██║   ██║██║███████║   ██║   ███████║███████║██╔██╗ ██║
-    {G}>> LEVIATHAN UNIVERSAL v20.0 [1200+ LINES] - THM ARSENAL <<{END}
-    """)
+    print(f"""{G}
+LEVIATHAN v3 — SMART CTF SOLVER
+THM / HackTheBox MODE
+{END}""")
 
-    target_ip = input(f"{G}▸ Target IP: {END}").strip()
-    if not target_ip: return
-
-    framework = LeviathanUniversal(target_ip)
-    framework.start_engagement()
+    target = input("Target IP: ").strip()
+    solver(target)
+    report()
 
 if __name__ == "__main__":
     main()
