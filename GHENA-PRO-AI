@@ -1,200 +1,216 @@
 #!/usr/bin/env python3
-import requests
+import os
 import subprocess
 import shlex
-import re
-import os
+import requests
 import datetime
+import re
 
-# ========= CONFIG =========
-API_KEY = os.getenv("OPENAI_API_KEY")
+# =========================
+# 🔐 AUTO DETECT API KEY
+# =========================
+def load_api_key():
+    # 1) ENV
+    key = os.getenv("OPENAI_API_KEY")
+
+    # 2) .env fallback
+    if not key:
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            key = os.getenv("OPENAI_API_KEY")
+        except:
+            pass
+
+    # 3) return or None (offline mode)
+    return key
+
+API_KEY = load_api_key()
 MODEL = "gpt-4.1-mini"
 
-if not API_KEY:
-    print("[-] Missing OPENAI_API_KEY")
-    exit()
+OFFLINE_MODE = False if API_KEY else True
 
-# ========= UI =========
-G="\033[92m"; R="\033[91m"; Y="\033[93m"; C="\033[96m"; END="\033[0m"
-
-# ========= STATE MACHINE =========
-state = {
-    "phase": "recon",
-    "shell": False,
-    "privilege": "unknown",
-    "services": []
-}
+# =========================
+# 🎨 UI
+# =========================
+G="\033[92m"; Y="\033[93m"; C="\033[96m"; R="\033[91m"; END="\033[0m"
 
 history = []
 notes = []
 
-SYSTEM = """
-You are an expert CTF solver (TryHackMe / HackTheBox).
-
-Rules:
-- Give ONLY next step
-- Be extremely short
-- Focus on current phase
-- No explanations
+# =========================
+# 🧠 AI ENGINE (SAFE)
+# =========================
+SYSTEM_PROMPT = """
+You are a CTF assistant (THM / HTB).
+Return ONLY next step, short and practical.
 """
 
-# ========= AI =========
 def ask_ai(data):
-    history.append({"role":"user","content":data})
+    global OFFLINE_MODE
 
-    r = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={"Authorization":f"Bearer {API_KEY}"},
-        json={
-            "model": MODEL,
-            "messages":[{"role":"system","content":SYSTEM}] + history
-        }
-    )
+    if OFFLINE_MODE:
+        return offline_engine(data)
 
-    reply = r.json()["choices"][0]["message"]["content"]
-    history.append({"role":"assistant","content":reply})
-    return reply
+    try:
+        history.append({"role":"user","content":data})
 
-# ========= RUN =========
+        r = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": MODEL,
+                "messages":[{"role":"system","content":SYSTEM_PROMPT}] + history
+            },
+            timeout=15
+        )
+
+        r.raise_for_status()
+
+        reply = r.json()["choices"][0]["message"]["content"]
+        history.append({"role":"assistant","content":reply})
+        return reply
+
+    except Exception as e:
+        print(f"{R}[AI ERROR → switching offline mode]{END}")
+        OFFLINE_MODE = True
+        return offline_engine(data)
+
+# =========================
+# 📴 OFFLINE AI (NO API)
+# =========================
+def offline_engine(data):
+    text = data.lower()
+
+    # Simple heuristic reasoning
+    if "nmap" in text:
+        return "Check open ports manually → focus HTTP / SSH / SMB"
+    if "login" in text:
+        return "Try default creds / brute force / SQL injection check"
+    if "upload" in text:
+        return "Test file upload bypass (php, burp, extensions)"
+    if "uid=" in text:
+        return "Run sudo -l and SUID enumeration"
+    if "port 80" in text or "http" in text:
+        return "Run directory brute force (ffuf / gobuster)"
+    
+    return "Manual enumeration required (recon deeper)"
+
+# =========================
+# ⚙️ RUN COMMAND
+# =========================
 def run(cmd):
     print(f"{Y}[RUN]{END} {cmd}")
-    p = subprocess.Popen(shlex.split(cmd),
-                         stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE,
-                         text=True)
-    out, err = p.communicate()
-    return out if out else err
+    try:
+        p = subprocess.Popen(
+            shlex.split(cmd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        out, err = p.communicate(timeout=120)
+        return out if out else err
+    except Exception as e:
+        return str(e)
 
-# ========= PARSERS =========
+# =========================
+# 🔍 PARSER
+# =========================
 def parse_nmap(data):
     return re.findall(r'(\d+)/tcp\s+open\s+([^\s]+)', data)
 
-def detect_web(output):
-    o = output.lower()
-    if "404" in o:
-        return "vhost"
-    if "?page=" in o:
-        return "lfi"
-    if "login" in o:
-        return "auth"
-    if "upload" in o:
-        return "upload"
-    return "unknown"
-
-def detect_priv(output):
-    if "uid=0" in output:
-        return "root"
-    if "uid=" in output:
-        return "user"
-    return "unknown"
-
-# ========= BRAIN =========
-def decide_next_step(output):
-    global state
-
-    # Update state
-    if "nmap" in output:
-        state["services"] = parse_nmap(output)
-
-    if "www-data" in output or "shell" in output:
-        state["shell"] = True
-
-    if "uid=" in output:
-        state["privilege"] = detect_priv(output)
-
-    # ===== PHASE LOGIC =====
-    if state["phase"] == "recon":
-        return "Run nmap with scripts + version scan"
-
-    if state["phase"] == "enum":
-        return "Check web directories / parameters / vhosts"
-
-    if state["shell"]:
-        state["phase"] = "privesc"
-        return "Start privilege escalation checks"
-
-    if state["phase"] == "privesc":
-        return "Check sudo -l, SUID, cron jobs, kernel exploits"
-
-    return "Manual analysis required"
-
-# ========= WEB ANALYZER =========
-def web_analyzer(target):
+# =========================
+# 🌐 WEB HEURISTIC
+# =========================
+def web_check(target):
     try:
         r = requests.get(f"http://{target}", timeout=5)
         t = r.text.lower()
 
-        if "404" in t:
-            return "Possible VHOST"
         if "login" in t:
-            return "Login panel"
+            return "Login page detected"
         if "upload" in t:
-            return "File upload"
-        if "?id=" in t or "?page=" in t:
-            return "Possible injection point"
-
-        return "No obvious vectors"
-
+            return "Upload feature found"
+        if "?id=" in t:
+            return "Possible SQL injection parameter"
+        return "No obvious hints"
     except:
-        return "Web unreachable"
+        return "Web not reachable"
 
-# ========= LOOP =========
+# =========================
+# 🧠 DECISION ENGINE
+# =========================
+def decide_step(output):
+    if "uid=" in output:
+        return "Privilege escalation phase"
+    if "open" in output:
+        return "Enumeration phase"
+    return "Recon phase"
+
+# =========================
+# 🚀 SOLVER CORE
+# =========================
 def solver(target):
     print(f"{G}Target:{END} {target}")
 
-    # ===== RECON =====
-    output = run(f"nmap -sC -sV {target}")
-    print(output[:600])
+    # RECON
+    nmap_out = run(f"nmap -sC -sV {target}")
+    print(nmap_out[:500])
 
-    state["services"] = parse_nmap(output)
+    ports = parse_nmap(nmap_out)
+    print(f"{C}Open Ports:{END} {ports}")
 
-    # ===== WEB =====
-    web_info = web_analyzer(target)
-    print(f"{C}[Web]{END} {web_info}")
+    web = web_check(target)
+    print(f"{C}[WEB]{END} {web}")
 
-    state["phase"] = "enum"
+    output = nmap_out
 
-    # ===== MAIN LOOP =====
+    # LOOP
     while True:
-        print(f"\n{C}[STATE]{END} {state}")
+        phase = decide_step(output)
 
-        suggestion = decide_next_step(output)
-        ai = ask_ai(f"""
-State: {state}
-Output: {output[:500]}
-Suggestion: {suggestion}
-What is next step?
-""")
+        print(f"\n{C}[PHASE]{END} {phase}")
+        suggestion = ask_ai(f"Phase: {phase}\nOutput:\n{output[:500]}\nWhat next?")
 
-        print(f"{G}[AI]{END} {ai}")
+        print(f"{G}[AI]{END} {suggestion}")
 
-        choice = input("(run / next / save / exit): ").strip()
+        choice = input("(run / save / exit / offline): ").strip()
 
         if choice == "run":
-            output = run(ai)
+            output = run(suggestion)
 
-        elif choice == "next":
-            state["phase"] = "enum" if state["phase"] == "recon" else state["phase"]
+        elif choice == "offline":
+            global OFFLINE_MODE
+            OFFLINE_MODE = True
+            print("[+] Switched to offline mode")
 
         elif choice == "save":
-            notes.append({"time":str(datetime.datetime.now()),"step":ai})
+            notes.append({"time":str(datetime.datetime.now()),"step":suggestion})
             print("[+] saved")
 
         elif choice == "exit":
             break
 
-# ========= REPORT =========
+# =========================
+# 📄 REPORT
+# =========================
 def report():
-    print(f"{Y}\n=== REPORT ==={END}")
+    print(f"{Y}\n=== NOTES ==={END}")
     for n in notes:
         print(n)
 
-# ========= MAIN =========
+# =========================
+# MAIN
+# =========================
 def main():
     print(f"""{G}
-LEVIATHAN v3 — SMART CTF SOLVER
-THM / HackTheBox MODE
+LEVIATHAN v4 — SMART RESILIENT CTF SOLVER
 {END}""")
+
+    print(f"{C}[Mode]{END} {'OFFLINE' if OFFLINE_MODE else 'ONLINE AI'}")
 
     target = input("Target IP: ").strip()
     solver(target)
