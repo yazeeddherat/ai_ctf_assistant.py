@@ -1,107 +1,16 @@
 #!/usr/bin/env python3
-import os
 import subprocess
 import shlex
-import requests
-import datetime
 import re
+import datetime
+import requests
 
-# =========================
-# 🔐 AUTO DETECT API KEY
-# =========================
-def load_api_key():
-    # 1) ENV
-    key = os.getenv("OPENAI_API_KEY")
-
-    # 2) .env fallback
-    if not key:
-        try:
-            from dotenv import load_dotenv
-            load_dotenv()
-            key = os.getenv("OPENAI_API_KEY")
-        except:
-            pass
-
-    # 3) return or None (offline mode)
-    return key
-
-API_KEY = load_api_key()
-MODEL = "gpt-4.1-mini"
-
-OFFLINE_MODE = False if API_KEY else True
-
-# =========================
-# 🎨 UI
-# =========================
+# ========= UI =========
 G="\033[92m"; Y="\033[93m"; C="\033[96m"; R="\033[91m"; END="\033[0m"
 
-history = []
 notes = []
 
-# =========================
-# 🧠 AI ENGINE (SAFE)
-# =========================
-SYSTEM_PROMPT = """
-You are a CTF assistant (THM / HTB).
-Return ONLY next step, short and practical.
-"""
-
-def ask_ai(data):
-    global OFFLINE_MODE
-
-    if OFFLINE_MODE:
-        return offline_engine(data)
-
-    try:
-        history.append({"role":"user","content":data})
-
-        r = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": MODEL,
-                "messages":[{"role":"system","content":SYSTEM_PROMPT}] + history
-            },
-            timeout=15
-        )
-
-        r.raise_for_status()
-
-        reply = r.json()["choices"][0]["message"]["content"]
-        history.append({"role":"assistant","content":reply})
-        return reply
-
-    except Exception as e:
-        print(f"{R}[AI ERROR → switching offline mode]{END}")
-        OFFLINE_MODE = True
-        return offline_engine(data)
-
-# =========================
-# 📴 OFFLINE AI (NO API)
-# =========================
-def offline_engine(data):
-    text = data.lower()
-
-    # Simple heuristic reasoning
-    if "nmap" in text:
-        return "Check open ports manually → focus HTTP / SSH / SMB"
-    if "login" in text:
-        return "Try default creds / brute force / SQL injection check"
-    if "upload" in text:
-        return "Test file upload bypass (php, burp, extensions)"
-    if "uid=" in text:
-        return "Run sudo -l and SUID enumeration"
-    if "port 80" in text or "http" in text:
-        return "Run directory brute force (ffuf / gobuster)"
-    
-    return "Manual enumeration required (recon deeper)"
-
-# =========================
-# ⚙️ RUN COMMAND
-# =========================
+# ========= RUNNER =========
 def run(cmd):
     print(f"{Y}[RUN]{END} {cmd}")
     try:
@@ -116,104 +25,203 @@ def run(cmd):
     except Exception as e:
         return str(e)
 
-# =========================
-# 🔍 PARSER
-# =========================
+# ========= PARSER =========
 def parse_nmap(data):
     return re.findall(r'(\d+)/tcp\s+open\s+([^\s]+)', data)
 
-# =========================
-# 🌐 WEB HEURISTIC
-# =========================
+# ========= ROOM CLASSIFIER =========
+def classify_room(name, services):
+    s = set(services)
+
+    if "ftp" in s and "ssh" in s:
+        return "Linux Credential Box"
+    if "http" in s and "login" in name.lower():
+        return "Web Authentication / Hijack Box"
+    if "http" in s:
+        return "Web Exploitation Box"
+    if "nfs" in s:
+        return "File Share Exploitation Box"
+    if "ftp" in s:
+        return "FTP Misconfiguration Box"
+
+    return "Unknown Mixed Box"
+
+# ========= WEB CHECK =========
 def web_check(target):
     try:
         r = requests.get(f"http://{target}", timeout=5)
         t = r.text.lower()
 
         if "login" in t:
-            return "Login page detected"
+            return "Login panel detected"
         if "upload" in t:
-            return "Upload feature found"
+            return "File upload feature detected"
+        if "dashboard" in t:
+            return "Authenticated panel detected"
         if "?id=" in t:
-            return "Possible SQL injection parameter"
-        return "No obvious hints"
+            return "Possible IDOR / SQL injection parameter"
+
+        return "No obvious web vectors"
+
     except:
-        return "Web not reachable"
+        return "Web unreachable"
 
-# =========================
-# 🧠 DECISION ENGINE
-# =========================
-def decide_step(output):
-    if "uid=" in output:
-        return "Privilege escalation phase"
-    if "open" in output:
-        return "Enumeration phase"
-    return "Recon phase"
+# ========= EXPLOIT HINT ENGINE =========
+def exploit_hints(services):
+    hints = []
 
-# =========================
-# 🚀 SOLVER CORE
-# =========================
-def solver(target):
+    if "ftp" in services:
+        hints.append("FTP → check anonymous login + file enumeration")
+
+    if "http" in services:
+        hints.append("Web → check login, sessions, cookies, hidden dirs")
+
+    if "ssh" in services:
+        hints.append("SSH → reuse credentials or brute force weak users")
+
+    if "nfs" in services:
+        hints.append("NFS → mount shares and search sensitive files")
+
+    if "rpcbind" in services:
+        hints.append("RPC → enumerate services (rpcinfo -p)")
+
+    return hints
+
+# ========= ATTACK PATH GENERATOR =========
+def attack_path(services):
+    path = []
+
+    if "http" in services:
+        path.append("1. Web enumeration (directories, login, parameters)")
+        path.append("2. Test session handling / auth bypass")
+
+    if "ftp" in services:
+        path.append("3. FTP access → extract files / credentials")
+
+    if "nfs" in services:
+        path.append("4. Mount NFS share → search secrets")
+
+    if "ssh" in services:
+        path.append("5. SSH login using discovered credentials")
+
+    path.append("6. Privilege escalation (sudo / SUID / cron / kernel)")
+
+    return path
+
+# ========= ROOM INTELLIGENCE (NEW CORE) =========
+def room_intelligence(room_name, services):
+    name = room_name.lower()
+
+    if "hijack" in name:
+        return [
+            "Focus: Session hijacking",
+            "Check cookies, tokens, session IDs",
+            "Look for login / auth bypass / IDOR"
+        ]
+
+    if "upload" in name:
+        return [
+            "Focus: File upload exploitation",
+            "Try web shell upload or extension bypass"
+        ]
+
+    if "backup" in name:
+        return [
+            "Focus: exposed backups",
+            "Search for .zip .bak .old files"
+        ]
+
+    if "admin" in name:
+        return [
+            "Focus: admin panel bypass",
+            "Try default creds + SQLi login bypass"
+        ]
+
+    # fallback based on services
+    if "http" in services:
+        return ["Focus: Web exploitation (enum + injection testing)"]
+
+    return ["Focus: Full enumeration required"]
+
+# ========= PRIORITY =========
+def priority(services):
+    if "http" in services:
+        return "HIGH"
+    if "ftp" in services:
+        return "MEDIUM"
+    if "ssh" in services:
+        return "MEDIUM"
+    return "LOW"
+
+# ========= SOLVER =========
+def solver(target, room_name="unknown"):
     print(f"{G}Target:{END} {target}")
 
-    # RECON
+    # ===== SCAN =====
     nmap_out = run(f"nmap -sC -sV {target}")
-    print(nmap_out[:500])
+    print(nmap_out[:600])
 
     ports = parse_nmap(nmap_out)
-    print(f"{C}Open Ports:{END} {ports}")
+    services = [p[1] for p in ports]
 
+    print(f"\n{C}[SERVICES]{END} {services}")
+
+    # ===== ROOM TYPE =====
+    room = classify_room(room_name, services)
+    print(f"{C}[ROOM TYPE]{END} {room}")
+
+    # ===== PRIORITY =====
+    print(f"{Y}[PRIORITY]{END} {priority(services)}")
+
+    # ===== WEB =====
     web = web_check(target)
     print(f"{C}[WEB]{END} {web}")
 
-    output = nmap_out
+    # ===== HINTS =====
+    print(f"\n{Y}[HINTS]{END}")
+    for h in exploit_hints(services):
+        print("- " + h)
 
-    # LOOP
+    # ===== ROOM INTELLIGENCE =====
+    print(f"\n{R}[ROOM INTELLIGENCE]{END}")
+    for i in room_intelligence(room_name, services):
+        print("- " + i)
+
+    # ===== ATTACK PATH =====
+    print(f"\n{R}[ATTACK PATH]{END}")
+    for step in attack_path(services):
+        print(step)
+
+    # ===== LOOP =====
     while True:
-        phase = decide_step(output)
+        choice = input("\n(recon / enum / exit): ").strip()
 
-        print(f"\n{C}[PHASE]{END} {phase}")
-        suggestion = ask_ai(f"Phase: {phase}\nOutput:\n{output[:500]}\nWhat next?")
+        if choice == "recon":
+            print(run(f"nmap -sC -sV {target}"))
 
-        print(f"{G}[AI]{END} {suggestion}")
-
-        choice = input("(run / save / exit / offline): ").strip()
-
-        if choice == "run":
-            output = run(suggestion)
-
-        elif choice == "offline":
-            global OFFLINE_MODE
-            OFFLINE_MODE = True
-            print("[+] Switched to offline mode")
-
-        elif choice == "save":
-            notes.append({"time":str(datetime.datetime.now()),"step":suggestion})
-            print("[+] saved")
+        elif choice == "enum":
+            print("\n".join(exploit_hints(services)))
 
         elif choice == "exit":
             break
 
-# =========================
-# 📄 REPORT
-# =========================
+# ========= REPORT =========
 def report():
-    print(f"{Y}\n=== NOTES ==={END}")
+    print(f"{Y}\n=== SESSION END ==={END}")
     for n in notes:
         print(n)
 
-# =========================
-# MAIN
-# =========================
+# ========= MAIN =========
 def main():
     print(f"""{G}
-LEVIATHAN v4 — SMART RESILIENT CTF SOLVER
+LEVIATHAN v7 — ROOM INTELLIGENCE SOLVER
+THM / HTB CTF ENGINE
 {END}""")
 
-    print(f"{C}[Mode]{END} {'OFFLINE' if OFFLINE_MODE else 'ONLINE AI'}")
-
     target = input("Target IP: ").strip()
-    solver(target)
+    room_name = input("Room name (optional): ").strip()
+
+    solver(target, room_name)
     report()
 
 if __name__ == "__main__":
